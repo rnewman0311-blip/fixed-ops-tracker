@@ -448,11 +448,11 @@ function ForecastTab({ selected, forecast, forecastTotalSale, group, monthPercen
             <p className="mt-3 border-t pt-3 font-extrabold">Combined Gross: {money(selected.totalGross)}</p>
           </div>
         </Stat>
-        <Stat title="Forecast Parts and Service Total" value={money(forecastTotalSale)}>
+        <Stat title="Month End Tracking Parts & Service" value={money(forecastTotalSale)}>
           <div className="mt-4 rounded-xl bg-slate-100 p-5">
-            <p className="font-bold text-slate-500">Service Forecast: {money(forecast.labor)} · Gross: {money(forecast.laborGross)}</p>
-            <p className="mt-2 font-bold text-slate-500">Parts Forecast: {money(forecast.parts)} · Gross: {money(forecast.partsGross)}</p>
-            <p className="mt-3 border-t pt-3 font-extrabold">Combined Gross Forecast: {money(forecast.totalGross)}</p>
+            <p className="font-bold text-slate-500">Service Tracking: {money(forecast.labor)} · Gross: {money(forecast.laborGross)}</p>
+            <p className="mt-2 font-bold text-slate-500">Parts Tracking: {money(forecast.parts)} · Gross: {money(forecast.partsGross)}</p>
+            <p className="mt-3 border-t pt-3 font-extrabold">Combined Gross Tracking: {money(forecast.totalGross)}</p>
           </div>
         </Stat>
       </div>
@@ -461,10 +461,10 @@ function ForecastTab({ selected, forecast, forecastTotalSale, group, monthPercen
         <h2 className="text-xl font-bold">MTD & Tracking — {store}</h2>
         <p className="mt-1 text-sm text-slate-500">{fmtMonth(date)}</p>
         <div className="mt-5 grid gap-4 md:grid-cols-3">
-          <Stat title="Forecast ROs" value={qty(forecast.repairOrders)} />
-          <Stat title="Forecast Hours" value={qty(forecast.hours, 1)} />
-          <Stat title="Forecast Labor" value={money(forecast.labor)} />
-          <Stat title="Forecast Parts" value={money(forecast.parts)} />
+          <Stat title="Total ROs" value={qty(forecast.repairOrders)} />
+          <Stat title="Total Hours" value={qty(forecast.hours, 1)} />
+          <Stat title="Total Labor" value={money(forecast.labor)} />
+          <Stat title="Total Parts" value={money(forecast.parts)} />
           <Stat title="Current ELR" value={money(selected.elr)} sub={`Group ELR: ${money(group.elr)}`}>
             <Badge value={selected.elr} benchmark={group.elr} />
           </Stat>
