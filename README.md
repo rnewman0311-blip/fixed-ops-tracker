@@ -1,3 +1,3 @@
 # Fixed Ops Tracker
 
-Update: yellow daily entry fields, yellow Current Month box, previous-day working days, and latest GROUP OVERVIEW wording.
+GROUP OVERVIEW update: separate side-by-side dealer cards, Tracking End of Month labels, yellow entry fields/month box, and previous-day working days.
