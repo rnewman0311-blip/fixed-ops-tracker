@@ -1,3 +1,3 @@
 # Fixed Ops Tracker
 
-Small GROUP OVERVIEW update: Forecast Sale label, Group Labor Sale, and Group Parts Sale.
+Update: yellow daily entry fields, yellow Current Month box, previous-day working days, and latest GROUP OVERVIEW wording.
