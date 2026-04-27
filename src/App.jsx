@@ -51,7 +51,7 @@ const timing = (dateString) => {
   const selected = new Date(`${dateString}T12:00:00`);
   const dates = monthDates(dateString);
   const open = dates.filter((d) => !dayStatus(d).closed);
-  const passed = open.filter((d) => new Date(`${d}T12:00:00`) <= selected);
+  const passed = open.filter((d) => new Date(`${d}T12:00:00`) < selected);
   return { passed: passed.length, total: open.length, closed: dates.length - open.length };
 };
 const fmtDate = (d) => new Date(`${d}T12:00:00`).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
@@ -111,7 +111,7 @@ function Progress({ percent }) {
   return <div className="mt-2 h-2 rounded-full bg-slate-100"><div className="h-2 rounded-full bg-slate-900" style={{ width: `${p}%` }} /></div>;
 }
 function Field({ label, value, onChange }) {
-  return <div><label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-500">{label}</label><input className="h-12 w-full rounded-xl border border-slate-300 px-3 text-lg outline-none focus:border-slate-900" type="number" value={value} onChange={(e) => onChange(e.target.value)} placeholder="0" /></div>;
+  return <div><label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-500">{label}</label><input className="h-12 w-full rounded-xl border-2 border-yellow-400 bg-yellow-100 px-3 text-lg outline-none focus:border-yellow-600" type="number" value={value} onChange={(e) => onChange(e.target.value)} placeholder="0" /></div>;
 }
 
 export default function FixedOpsTracker() {
@@ -153,7 +153,7 @@ export default function FixedOpsTracker() {
 
   return <div className="min-h-screen bg-slate-50 p-4 text-slate-950 md:p-8"><div className="mx-auto max-w-7xl">
     <div className="mb-6 text-center"><h2 className="text-4xl font-extrabold tracking-tight">Dealer Operating Control Service</h2></div>
-    <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between"><div><h1 className="text-3xl font-bold">Fixed Ops Daily Tracker</h1><p className="text-sm text-slate-500">Daily entry, monthly summary, MTD forecast, and director overview.</p></div><div className="flex flex-col items-start gap-3 md:items-end"><div className="rounded-2xl border border-slate-200 bg-white px-6 py-4 text-center shadow-sm"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Current Month</p><p className="mt-1 text-3xl font-extrabold text-slate-950">{fmtMonth(date)}</p></div><select className="h-11 rounded-xl border border-slate-300 bg-white px-3" value={login} onChange={(e) => changeLogin(e.target.value)}>{Object.entries(logins).map(([k, v]) => <option key={k} value={k}>{v.name}</option>)}</select></div></div>
+    <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between"><div><h1 className="text-3xl font-bold">Fixed Ops Daily Tracker</h1><p className="text-sm text-slate-500">Daily entry, monthly summary, MTD forecast, and director overview.</p></div><div className="flex flex-col items-start gap-3 md:items-end"><div className="rounded-2xl border-2 border-yellow-400 bg-yellow-100 px-6 py-4 text-center shadow-sm"><p className="text-xs font-bold uppercase tracking-wide text-slate-600">Current Month</p><p className="mt-1 text-3xl font-extrabold text-slate-950">{fmtMonth(date)}</p></div><select className="h-11 rounded-xl border border-slate-300 bg-white px-3" value={login} onChange={(e) => changeLogin(e.target.value)}>{Object.entries(logins).map(([k, v]) => <option key={k} value={k}>{v.name}</option>)}</select></div></div>
     <Card className="mb-6 p-5"><div className="grid gap-4 md:grid-cols-4"><div className="md:col-span-2"><label className="mb-2 block text-xs font-bold uppercase text-slate-500">Dealership</label><select className="h-11 w-full rounded-xl border border-slate-300 bg-white px-3 disabled:bg-slate-100" value={store} disabled={activeLogin.role !== "director"} onChange={(e) => setSelectedStore(e.target.value)}>{allowedStores.map((s) => <option key={s} value={s}>{s}</option>)}</select></div><Stat title="Working Days Passed" value={qty(t.passed)} /><Stat title="Working Days In Month" value={qty(t.total)} /><div className="md:col-span-4"><div className="flex justify-between text-sm"><span className="font-semibold">Working Month Progress</span><span>{qty(monthPercent, 1)}% complete · {t.closed} closed days excluded</span></div><Progress percent={monthPercent} /></div></div></Card>
     <div className="mb-6 grid grid-cols-2 gap-2 rounded-2xl bg-white p-2 shadow-sm md:grid-cols-4">{[["daily","Daily Entry"],["weekly","Monthly Summary"],["forecast","MTD & Forecast"],["director","GROUP OVERVIEW"]].map(([k, label]) => <button key={k} onClick={() => setTab(k)} className={`rounded-xl px-4 py-3 text-sm font-semibold ${tab === k ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"}`}>{label}</button>)}</div>
 
