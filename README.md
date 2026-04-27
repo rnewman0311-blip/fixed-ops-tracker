@@ -1,3 +1,3 @@
 # Fixed Ops Tracker
 
-Final DOCS update with GROUP OVERVIEW, current month display, sticky monthly table header, and forecast gross/total summary.
+Small GROUP OVERVIEW update: Forecast Sale label, Group Labor Sale, and Group Parts Sale.
