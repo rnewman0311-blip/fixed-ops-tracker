@@ -3,12 +3,12 @@ import React, { useMemo, useState } from "react";
 const stores = ["Honda of Pasadena", "CDJR Seattle", "El Cajon Ford", "Brandon Ford", "Friendly Ford"];
 
 const logins = {
-  director: { name: "Richard / Director", role: "director", store: "All Stores" },
-  pasadena: { name: "Honda of Pasadena Login", role: "dealer", store: "Honda of Pasadena" },
-  seattle: { name: "CDJR Seattle Login", role: "dealer", store: "CDJR Seattle" },
-  elcajon: { name: "El Cajon Ford Login", role: "dealer", store: "El Cajon Ford" },
-  brandon: { name: "Brandon Ford Login", role: "dealer", store: "Brandon Ford" },
-  friendly: { name: "Friendly Ford Login", role: "dealer", store: "Friendly Ford" },
+  director: { name: "Richard / Director", username: "richard", password: "director123", role: "director", store: "All Stores" },
+  pasadena: { name: "Honda of Pasadena Login", username: "pasadena", password: "pasadena123", role: "dealer", store: "Honda of Pasadena" },
+  seattle: { name: "CDJR Seattle Login", username: "seattle", password: "seattle123", role: "dealer", store: "CDJR Seattle" },
+  elcajon: { name: "El Cajon Ford Login", username: "elcajon", password: "elcajon123", role: "dealer", store: "El Cajon Ford" },
+  brandon: { name: "Brandon Ford Login", username: "brandon", password: "brandon123", role: "dealer", store: "Brandon Ford" },
+  friendly: { name: "Friendly Ford Login", username: "friendly", password: "friendly123", role: "dealer", store: "Friendly Ford" },
 };
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -53,6 +53,13 @@ const dayStatus = (dateString) => {
   if (d.getDay() === 0) return { closed: true, reason: "Sunday Closed" };
   if (holiday) return { closed: true, reason: holiday };
   return { closed: false, reason: "Open" };
+};
+const priorBusinessDay = () => {
+  const d = new Date(`${today()}T12:00:00`);
+  do {
+    d.setDate(d.getDate() - 1);
+  } while (dayStatus(dateKey(d)).closed);
+  return dateKey(d);
 };
 const monthDates = (dateString) => {
   const d = new Date(`${dateString}T12:00:00`);
@@ -169,14 +176,19 @@ function Progress({ percent }) {
   );
 }
 
-function Field({ label, value, onChange }) {
+function Field({ label, value, onChange, disabled = false }) {
   return (
     <div>
       <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-500">{label}</label>
       <input
-        className="h-12 w-full rounded-xl border-2 border-yellow-400 bg-yellow-100 px-3 text-lg outline-none focus:border-yellow-600"
+        className={`h-12 w-full rounded-xl border-2 px-3 text-lg outline-none ${
+          disabled
+            ? "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed"
+            : "border-yellow-400 bg-yellow-100 focus:border-yellow-600"
+        }`}
         type="number"
         value={value}
+        disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
         placeholder="0"
       />
@@ -186,14 +198,18 @@ function Field({ label, value, onChange }) {
 
 export default function FixedOpsTracker() {
   const [tab, setTab] = useState("daily");
-  const [login, setLogin] = useState("director");
+  const [loginUsername, setLoginUsername] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loginError, setLoginError] = useState("");
+  const [activeLoginKey, setActiveLoginKey] = useState(null);
   const [selectedStore, setSelectedStore] = useState(stores[0]);
-  const [date, setDate] = useState(today());
+  const [date, setDate] = useState(priorBusinessDay());
   const [entries, setEntries] = useState(seedData);
 
-  const activeLogin = logins[login];
-  const allowedStores = activeLogin.role === "director" ? stores : [activeLogin.store];
+  const activeLogin = activeLoginKey ? logins[activeLoginKey] : null;
+  const allowedStores = stores;
   const store = allowedStores.includes(selectedStore) ? selectedStore : allowedStores[0];
+  const canEditStore = activeLogin?.role === "director" || activeLogin?.store === store;
   const key = `${store}-${date}`;
   const current = entries[key] || blank(store, date);
   const t = timing(date);
@@ -201,7 +217,7 @@ export default function FixedOpsTracker() {
   const multiplier = t.passed > 0 ? t.total / t.passed : 0;
 
   const allRows = useMemo(() => Object.values(entries), [entries]);
-  const visibleRows = allRows.filter((row) => allowedStores.includes(row.store));
+  const visibleRows = allRows;
   const selectedRows = allRows.filter((row) => row.store === store);
   const monthRows = monthDates(date).map((d) => entries[`${store}-${d}`] || blank(store, d));
 
@@ -236,10 +252,80 @@ export default function FixedOpsTracker() {
       [key]: { ...(prev[key] || blank(store, date)), [field]: value },
     }));
 
-  const changeLogin = (value) => {
-    setLogin(value);
-    if (logins[value].role === "dealer") setSelectedStore(logins[value].store);
+  const handleLogin = (event) => {
+    event.preventDefault();
+    const found = Object.entries(logins).find(
+      ([, account]) =>
+        account.username.toLowerCase() === loginUsername.trim().toLowerCase() &&
+        account.password === loginPassword
+    );
+
+    if (!found) {
+      setLoginError("Invalid username or password");
+      return;
+    }
+
+    const [loginKey, account] = found;
+    setActiveLoginKey(loginKey);
+    setLoginError("");
+    if (account.role === "dealer") setSelectedStore(account.store);
   };
+
+  const logout = () => {
+    setActiveLoginKey(null);
+    setLoginUsername("");
+    setLoginPassword("");
+    setLoginError("");
+  };
+
+  if (!activeLogin) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 p-4 text-slate-950">
+        <Card className="w-full max-w-md p-8">
+          <div className="text-center">
+            <h1 className="text-3xl font-extrabold tracking-tight">Dealer Operating Control Service</h1>
+            <p className="mt-2 text-sm text-slate-500">Fixed Ops Daily Tracker login</p>
+          </div>
+
+          <form onSubmit={handleLogin} className="mt-8 space-y-4">
+            <div>
+              <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-500">Username</label>
+              <input
+                className="h-12 w-full rounded-xl border border-slate-300 bg-white px-3 text-lg outline-none focus:border-slate-900"
+                value={loginUsername}
+                onChange={(event) => setLoginUsername(event.target.value)}
+                placeholder="richard"
+              />
+            </div>
+            <div>
+              <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-500">Password</label>
+              <input
+                className="h-12 w-full rounded-xl border border-slate-300 bg-white px-3 text-lg outline-none focus:border-slate-900"
+                type="password"
+                value={loginPassword}
+                onChange={(event) => setLoginPassword(event.target.value)}
+                placeholder="director123"
+              />
+            </div>
+            {loginError && <p className="rounded-xl bg-red-100 px-4 py-3 text-sm font-bold text-red-700">{loginError}</p>}
+            <button className="h-12 w-full rounded-xl bg-slate-900 text-sm font-extrabold uppercase tracking-wide text-white shadow-sm" type="submit">
+              Login
+            </button>
+          </form>
+
+          <div className="mt-6 rounded-2xl bg-slate-100 p-4 text-sm text-slate-600">
+            <p className="font-bold text-slate-800">Demo logins</p>
+            <p className="mt-2">Director: richard / director123</p>
+            <p>Honda: pasadena / pasadena123</p>
+            <p>Seattle: seattle / seattle123</p>
+            <p>El Cajon: elcajon / elcajon123</p>
+            <p>Brandon: brandon / brandon123</p>
+            <p>Friendly: friendly / friendly123</p>
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 text-slate-950 md:p-8">
@@ -252,17 +338,16 @@ export default function FixedOpsTracker() {
           <div>
             <h1 className="text-3xl font-bold">Fixed Ops Daily Tracker</h1>
             <p className="text-sm text-slate-500">Daily entry, monthly summary, MTD tracking, and director overview.</p>
+            <p className="mt-2 text-sm font-bold text-slate-700">Logged in as: {activeLogin.name}</p>
           </div>
           <div className="flex flex-col items-start gap-3 md:items-end">
             <div className="rounded-2xl border-2 border-yellow-400 bg-yellow-100 px-6 py-4 text-center shadow-sm">
               <p className="text-xs font-bold uppercase tracking-wide text-slate-600">Current Month</p>
               <p className="mt-1 text-3xl font-extrabold text-slate-950">{fmtMonth(date)}</p>
             </div>
-            <select className="h-11 rounded-xl border border-slate-300 bg-white px-3" value={login} onChange={(event) => changeLogin(event.target.value)}>
-              {Object.entries(logins).map(([loginKey, value]) => (
-                <option key={loginKey} value={loginKey}>{value.name}</option>
-              ))}
-            </select>
+            <button className="h-11 rounded-xl border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50" onClick={logout}>
+              Logout
+            </button>
           </div>
         </div>
 
@@ -273,7 +358,7 @@ export default function FixedOpsTracker() {
               <select
                 className="h-11 w-full rounded-xl border border-slate-300 bg-white px-3"
                 value={store}
-                disabled={activeLogin.role !== "director"}
+                disabled={false}
                 onChange={(event) => setSelectedStore(event.target.value)}
               >
                 {allowedStores.map((storeName) => <option key={storeName}>{storeName}</option>)}
@@ -313,7 +398,7 @@ export default function FixedOpsTracker() {
         </div>
 
         {tab === "daily" && (
-          <DailyTab current={current} date={date} setDate={setDate} update={update} daily={daily} />
+          <DailyTab current={current} date={date} setDate={setDate} update={update} daily={daily} canEditStore={canEditStore} activeLogin={activeLogin} store={store} />
         )}
 
         {tab === "weekly" && (
@@ -346,27 +431,32 @@ export default function FixedOpsTracker() {
   );
 }
 
-function DailyTab({ current, date, setDate, update, daily }) {
+function DailyTab({ current, date, setDate, update, daily, canEditStore, activeLogin, store }) {
   return (
     <div className="space-y-6">
       <Card className="p-5">
         <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div>
             <h2 className="text-xl font-bold">Daily Entry</h2>
-            <p className="text-sm text-slate-500">Enter numbers for the selected dealership and date.</p>
+            <p className="text-sm text-slate-500">Enter numbers for the prior open business day. Sundays and holidays are skipped automatically.</p>
+            {!canEditStore && (
+              <p className="mt-2 rounded-xl bg-slate-100 px-4 py-3 text-sm font-bold text-slate-600">
+                Read only: {activeLogin.name} can view {store}, but can only edit {activeLogin.store}.
+              </p>
+            )}
           </div>
           <div>
-            <label className="mb-2 block text-xs font-bold uppercase text-slate-500">Entry Date</label>
+            <label className="mb-2 block text-xs font-bold uppercase text-slate-500">Prior Business Day Entry Date</label>
             <input className="h-11 rounded-xl border border-slate-300 px-3" type="date" value={date} onChange={(event) => setDate(event.target.value)} />
           </div>
         </div>
         <div className="grid gap-4 md:grid-cols-3">
-          <Field label="Total Repair Orders" value={current.repairOrders} onChange={(value) => update("repairOrders", value)} />
-          <Field label="Total Hours" value={current.hours} onChange={(value) => update("hours", value)} />
-          <Field label="Total Labor" value={current.labor} onChange={(value) => update("labor", value)} />
-          <Field label="Total Parts" value={current.parts} onChange={(value) => update("parts", value)} />
-          <Field label="Total Labor Gross" value={current.laborGross} onChange={(value) => update("laborGross", value)} />
-          <Field label="Total Parts Gross" value={current.partsGross} onChange={(value) => update("partsGross", value)} />
+          <Field label="Total Repair Orders" value={current.repairOrders} disabled={!canEditStore} onChange={(value) => update("repairOrders", value)} />
+          <Field label="Total Hours" value={current.hours} disabled={!canEditStore} onChange={(value) => update("hours", value)} />
+          <Field label="Total Labor" value={current.labor} disabled={!canEditStore} onChange={(value) => update("labor", value)} />
+          <Field label="Total Parts" value={current.parts} disabled={!canEditStore} onChange={(value) => update("parts", value)} />
+          <Field label="Total Labor Gross" value={current.laborGross} disabled={!canEditStore} onChange={(value) => update("laborGross", value)} />
+          <Field label="Total Parts Gross" value={current.partsGross} disabled={!canEditStore} onChange={(value) => update("partsGross", value)} />
         </div>
       </Card>
 
@@ -383,16 +473,23 @@ function DailyTab({ current, date, setDate, update, daily }) {
 }
 
 function MonthlyTab({ monthRows, monthly, selected, forecast, multiplier, group, store, date }) {
+  const monthEndTracking = forecast.labor + forecast.parts;
+
   return (
     <div className="space-y-6">
       <div className="grid gap-4 md:grid-cols-5">
-        <Stat title="Month ROs" value={qty(monthly.repairOrders)} sub={`Forecast: ${qty(selected.repairOrders * multiplier)}`} />
-        <Stat title="Month Hours" value={qty(monthly.hours, 1)} sub={`Forecast: ${qty(selected.hours * multiplier, 1)}`} />
-        <Stat title="Month Labor" value={money(monthly.labor)} sub={`Forecast: ${money(forecast.labor)}`} />
-        <Stat title="Month Parts" value={money(monthly.parts)} sub={`Forecast: ${money(forecast.parts)}`} />
+        <Stat title="Month ROs" value={qty(monthly.repairOrders)} sub={`Tracking: ${qty(selected.repairOrders * multiplier)}`} />
+        <Stat title="Month Hours" value={qty(monthly.hours, 1)} sub={`Tracking: ${qty(selected.hours * multiplier, 1)}`} />
+        <Stat title="Month Labor" value={money(monthly.labor)} sub={`Tracking: ${money(forecast.labor)}`} />
+        <Stat title="Month Parts" value={money(monthly.parts)} sub={`Tracking: ${money(forecast.parts)}`} />
         <Stat title="Month ELR" value={money(monthly.elr)} sub={`Group ELR: ${money(group.elr)}`}>
           <Badge value={monthly.elr} benchmark={group.elr} />
         </Stat>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <Stat title="Total Parts and Service" value={money(monthly.totalSale)} sub="Labor + Parts" className="md:min-h-[150px] md:p-8" />
+        <Stat title="Month End Tracking" value={money(monthEndTracking)} sub="Parts and service tracking" className="md:min-h-[150px] md:p-8" />
       </div>
 
       <Card className="overflow-visible p-0">
@@ -488,8 +585,8 @@ function DirectorTab({ allowedStores, stores, visibleRows, group, monthPercent, 
         <Stat title="Group ELR" value={money(group.elr)} />
         <Stat title="Group Avg Gross Per RO" value={money(group.grossPerRo)} />
         <Stat title="Group Avg Parts/Labor" value={`${qty(group.partsToLabor * 100, 1)}%`} sub="Parts sale ÷ labor sale" />
-        <Stat title="Group Labor Sale" value={money(group.labor)} sub={`Forecast: ${money(groupLaborForecast)}`} />
-        <Stat title="Group Labor Gross" value={money(group.laborGross)} sub={`Forecast: ${money(groupLaborGrossForecast)}`}>
+        <Stat title="Group Labor Sale" value={money(group.labor)} sub={`Tracking: ${money(groupLaborForecast)}`} />
+        <Stat title="Group Labor Gross" value={money(group.laborGross)} sub={`Tracking: ${money(groupLaborGrossForecast)}`}>
           <p className="mt-2 text-sm font-semibold text-slate-500">Gross Profit %: {qty(groupLaborGrossPct, 2)}%</p>
         </Stat>
         <div className="md:col-span-2 md:row-span-2">
@@ -505,8 +602,8 @@ function DirectorTab({ allowedStores, stores, visibleRows, group, monthPercent, 
             </div>
           </Card>
         </div>
-        <Stat title="Group Parts Sale" value={money(group.parts)} sub={`Forecast: ${money(groupPartsForecast)}`} />
-        <Stat title="Group Parts Gross" value={money(group.partsGross)} sub={`Forecast: ${money(groupPartsGrossForecast)}`}>
+        <Stat title="Group Parts Sale" value={money(group.parts)} sub={`Tracking: ${money(groupPartsForecast)}`} />
+        <Stat title="Group Parts Gross" value={money(group.partsGross)} sub={`Tracking: ${money(groupPartsGrossForecast)}`}>
           <p className="mt-2 text-sm font-semibold text-slate-500">Gross Profit %: {qty(groupPartsGrossPct, 2)}%</p>
         </Stat>
       </div>
