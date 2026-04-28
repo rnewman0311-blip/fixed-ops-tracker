@@ -149,6 +149,20 @@ const seedData = () => {
   return seed;
 };
 
+const loadSavedEntries = () => {
+  const base = seedData();
+  try {
+    const saved = localStorage.getItem("fixedOpsEntries");
+    return saved ? { ...base, ...JSON.parse(saved) } : base;
+  } catch {
+    return base;
+  }
+};
+
+const saveEntries = (entries) => {
+  localStorage.setItem("fixedOpsEntries", JSON.stringify(entries));
+};
+
 function Card({ children, className = "" }) {
   return <div className={`rounded-2xl border border-slate-200 bg-white shadow-sm ${className}`}>{children}</div>;
 }
@@ -217,7 +231,7 @@ export default function FixedOpsTracker() {
   const [entryError, setEntryError] = useState("");
   const [selectedStore, setSelectedStore] = useState(stores[0]);
   const [date, setDate] = useState(priorBusinessDay());
-  const [entries, setEntries] = useState(seedData);
+  const [entries, setEntries] = useState(loadSavedEntries);
 
   const activeLogin = activeLoginKey ? logins[activeLoginKey] : null;
   const allowedStores = stores;
@@ -277,10 +291,14 @@ export default function FixedOpsTracker() {
     }
 
     setEntryError("");
-    setEntries((prev) => ({
-      ...prev,
-      [key]: nextEntry,
-    }));
+    setEntries((prev) => {
+      const updatedEntries = {
+        ...prev,
+        [key]: nextEntry,
+      };
+      saveEntries(updatedEntries);
+      return updatedEntries;
+    });
   };
 
   const handleLogin = (event) => {
