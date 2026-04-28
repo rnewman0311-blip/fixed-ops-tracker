@@ -1,816 +1,529 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { createClient } from "@supabase/supabase-js";
 
-const stores = ["Honda of Pasadena", "CDJR Hyundai Seattle", "El Cajon Ford", "Brandon Ford", "Friendly Ford"];
+const STORES = [
+  "Honda of Pasadena",
+  "CDJR Hyundai Seattle",
+  "El Cajon Ford",
+  "Brandon Ford",
+  "Friendly Ford",
+];
 
-const logins = {
-  director: { name: "Richard / Director", username: "richard", password: "director123", role: "director", store: "All Stores" },
-  pasadena: { name: "Honda of Pasadena Login", username: "pasadena", password: "pasadena123", role: "dealer", store: "Honda of Pasadena" },
-  seattle: { name: "CDJR Hyundai Seattle Login", username: "seattle", password: "seattle123", role: "dealer", store: "CDJR Hyundai Seattle" },
-  elcajon: { name: "El Cajon Ford Login", username: "elcajon", password: "elcajon123", role: "dealer", store: "El Cajon Ford" },
-  brandon: { name: "Brandon Ford Login", username: "brandon", password: "brandon123", role: "dealer", store: "Brandon Ford" },
-  friendly: { name: "Friendly Ford Login", username: "friendly", password: "friendly123", role: "dealer", store: "Friendly Ford" },
+const HOLIDAYS = new Set([
+  "2026-01-01",
+  "2026-05-25",
+  "2026-07-04",
+  "2026-09-07",
+  "2026-11-26",
+  "2026-12-25",
+]);
+
+const DEFAULT_USERS = {
+  richard: { password_plain: "director123", name: "Richard / Director", role: "director", store: "All Stores" },
+  pasadena: { password_plain: "pasadena123", name: "Honda of Pasadena Login", role: "dealer", store: "Honda of Pasadena" },
+  seattle: { password_plain: "seattle123", name: "CDJR Hyundai Seattle Login", role: "dealer", store: "CDJR Hyundai Seattle" },
+  elcajon: { password_plain: "elcajon123", name: "El Cajon Ford Login", role: "dealer", store: "El Cajon Ford" },
+  brandon: { password_plain: "brandon123", name: "Brandon Ford Login", role: "dealer", store: "Brandon Ford" },
+  friendly: { password_plain: "friendly123", name: "Friendly Ford Login", role: "dealer", store: "Friendly Ford" },
 };
 
-const defaultPasswords = Object.fromEntries(
-  Object.entries(logins).map(([key, account]) => [key, account.password])
-);
+const fields = [
+  { key: "ros", label: "Repair Orders" },
+  { key: "hours", label: "Labor Hours" },
+  { key: "labor", label: "Total Labor" },
+  { key: "laborGross", label: "Labor Gross" },
+  { key: "parts", label: "Total Parts" },
+  { key: "partsGross", label: "Parts Gross" },
+];
 
-const loadSavedPasswords = () => {
-  try {
-    const saved = localStorage.getItem("fixedOpsPasswords");
-    return saved ? { ...defaultPasswords, ...JSON.parse(saved) } : defaultPasswords;
-  } catch {
-    return defaultPasswords;
-  }
+const dbFields = {
+  ros: "ros",
+  hours: "hours",
+  labor: "labor",
+  laborGross: "labor_gross",
+  parts: "parts",
+  partsGross: "parts_gross",
 };
 
-const savePasswords = (passwords) => {
-  localStorage.setItem("fixedOpsPasswords", JSON.stringify(passwords));
-};
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const hasSupabase = Boolean(supabaseUrl && supabaseAnonKey);
+const supabase = hasSupabase ? createClient(supabaseUrl, supabaseAnonKey) : null;
 
-const today = () => new Date().toISOString().slice(0, 10);
-const dateKey = (date) => date.toISOString().slice(0, 10);
-const toNum = (value) => Number(String(value || "").replace(/[$,]/g, "")) || 0;
-const trunc = (value, digits = 2) => Math.trunc(Number(value || 0) * 10 ** digits) / 10 ** digits;
-const money = (value, digits = 2) =>
-  trunc(value, digits).toLocaleString("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: digits,
-    maximumFractionDigits: digits,
-  });
-const qty = (value, digits = 0) =>
-  trunc(value, digits).toLocaleString("en-US", {
-    minimumFractionDigits: digits,
-    maximumFractionDigits: digits,
-  });
+const money = (n) =>
+  Number(n || 0).toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 
-const fixedHoliday = (year, month, day) => dateKey(new Date(year, month, day, 12, 0, 0));
-const nthWeekday = (year, month, weekday, nth) => {
-  const first = new Date(year, month, 1, 12, 0, 0);
-  const offset = (weekday - first.getDay() + 7) % 7;
-  return dateKey(new Date(year, month, 1 + offset + (nth - 1) * 7, 12, 0, 0));
-};
-const lastWeekday = (year, month, weekday) => {
-  const last = new Date(year, month + 1, 0, 12, 0, 0);
-  last.setDate(last.getDate() - ((last.getDay() - weekday + 7) % 7));
-  return dateKey(last);
-};
-const holidays = (year) => ({
-  [fixedHoliday(year, 0, 1)]: "New Year's Day",
-  [lastWeekday(year, 4, 1)]: "Memorial Day",
-  [fixedHoliday(year, 6, 4)]: "Independence Day",
-  [nthWeekday(year, 8, 1, 1)]: "Labor Day",
-  [nthWeekday(year, 10, 4, 4)]: "Thanksgiving",
-  [fixedHoliday(year, 11, 25)]: "Christmas Day",
-});
-const dayStatus = (dateString) => {
-  const d = new Date(`${dateString}T12:00:00`);
-  const holiday = holidays(d.getFullYear())[dateString];
-  if (d.getDay() === 0) return { closed: true, reason: "Sunday Closed" };
-  if (holiday) return { closed: true, reason: holiday };
-  return { closed: false, reason: "Open" };
-};
-const priorBusinessDay = () => {
-  const d = new Date(`${today()}T12:00:00`);
-  do {
-    d.setDate(d.getDate() - 1);
-  } while (dayStatus(dateKey(d)).closed);
+const number = (n) => Number(n || 0).toLocaleString("en-US", { maximumFractionDigits: 1 });
+const pct = (n) => `${Number(n || 0).toFixed(1)}%`;
+
+function dateKey(date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function isOpenBusinessDay(date) {
+  const day = date.getDay();
+  return day !== 0 && !HOLIDAYS.has(dateKey(date));
+}
+
+function priorOpenBusinessDay(from = new Date()) {
+  const d = new Date(from);
+  d.setDate(d.getDate() - 1);
+  while (!isOpenBusinessDay(d)) d.setDate(d.getDate() - 1);
   return dateKey(d);
-};
-const monthDates = (dateString) => {
-  const d = new Date(`${dateString}T12:00:00`);
-  const days = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
-  return Array.from({ length: days }, (_, i) => dateKey(new Date(d.getFullYear(), d.getMonth(), i + 1, 12, 0, 0)));
-};
-const timing = (dateString) => {
-  const selected = new Date(`${dateString}T12:00:00`);
-  const dates = monthDates(dateString);
-  const open = dates.filter((d) => !dayStatus(d).closed);
-  const passed = open.filter((d) => new Date(`${d}T12:00:00`) < selected);
-  return { passed: passed.length, total: open.length, closed: dates.length - open.length };
-};
-const fmtDate = (dateString) =>
-  new Date(`${dateString}T12:00:00`).toLocaleDateString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  });
-const fmtMonth = (dateString) =>
-  new Date(`${dateString}T12:00:00`).toLocaleDateString("en-US", {
-    month: "long",
-    year: "numeric",
-  });
+}
 
-const blank = (store, date) => ({
-  id: `${store}-${date}`,
-  store,
-  date,
-  repairOrders: "",
-  hours: "",
-  labor: "",
-  parts: "",
-  laborGross: "",
-  partsGross: "",
-});
+function blankStoreData() {
+  return STORES.reduce((acc, store) => {
+    acc[store] = {};
+    return acc;
+  }, {});
+}
 
-const totalsOf = (rows) => {
-  const totals = rows.reduce(
-    (acc, row) => {
-      acc.repairOrders += toNum(row.repairOrders);
-      acc.hours += toNum(row.hours);
-      acc.labor += toNum(row.labor);
-      acc.parts += toNum(row.parts);
-      acc.laborGross += toNum(row.laborGross);
-      acc.partsGross += toNum(row.partsGross);
-      return acc;
-    },
-    { repairOrders: 0, hours: 0, labor: 0, parts: 0, laborGross: 0, partsGross: 0 }
-  );
+function toAppEntry(row) {
+  return {
+    ros: Number(row.ros || 0),
+    hours: Number(row.hours || 0),
+    labor: Number(row.labor || 0),
+    laborGross: Number(row.labor_gross || 0),
+    parts: Number(row.parts || 0),
+    partsGross: Number(row.parts_gross || 0),
+  };
+}
 
-  totals.totalSale = totals.labor + totals.parts;
-  totals.totalGross = totals.laborGross + totals.partsGross;
-  totals.elr = totals.hours > 0 ? totals.labor / totals.hours : 0;
-  totals.partsToLabor = totals.labor > 0 ? totals.parts / totals.labor : 0;
-  totals.grossPerRo = totals.repairOrders > 0 ? totals.totalGross / totals.repairOrders : 0;
-  return totals;
-};
+function toDbEntry(store, entryDate, entry) {
+  return {
+    store,
+    entry_date: entryDate,
+    ros: Number(entry.ros || 0),
+    hours: Number(entry.hours || 0),
+    labor: Number(entry.labor || 0),
+    labor_gross: Number(entry.laborGross || 0),
+    parts: Number(entry.parts || 0),
+    parts_gross: Number(entry.partsGross || 0),
+    updated_at: new Date().toISOString(),
+  };
+}
 
-const seedData = () => {
-  const seed = {};
-  const dates = monthDates(today());
-
-  stores.forEach((store) => {
-    dates.forEach((date) => {
-      seed[`${store}-${date}`] = blank(store, date);
-    });
-  });
-
-  return seed;
-};
-
-const loadSavedEntries = () => {
-  const base = seedData();
+function readLocalData() {
   try {
-    const saved = localStorage.getItem("fixedOpsEntries");
-    return saved ? { ...base, ...JSON.parse(saved) } : base;
+    return JSON.parse(localStorage.getItem("fixedOpsDailyData")) || blankStoreData();
   } catch {
-    return base;
+    return blankStoreData();
   }
-};
-
-const saveEntries = (entries) => {
-  localStorage.setItem("fixedOpsEntries", JSON.stringify(entries));
-};
-
-function Card({ children, className = "" }) {
-  return <div className={`rounded-2xl border border-slate-200 bg-white shadow-sm ${className}`}>{children}</div>;
 }
 
-function Stat({ title, value, sub, children, className = "" }) {
-  return (
-    <Card className={`p-5 text-center ${className}`}>
-      <p className="text-base font-semibold text-slate-500">{title}</p>
-      <p className="mt-2 text-3xl font-extrabold tracking-tight text-slate-950">{value}</p>
-      {sub && <p className="mt-2 text-sm text-slate-500">{sub}</p>}
-      {children}
-    </Card>
-  );
+function writeLocalData(next) {
+  localStorage.setItem("fixedOpsDailyData", JSON.stringify(next));
 }
 
-function Badge({ value, benchmark }) {
-  const below = Number(value || 0) < Number(benchmark || 0);
-  return (
-    <span className={`ml-2 inline-flex rounded-full px-3 py-1 text-xs font-extrabold ${below ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>
-      {below ? "↓ Below Avg" : "↑ At/Above Avg"}
-    </span>
-  );
-}
-
-function Progress({ percent }) {
-  const p = Math.min(100, Math.max(0, percent));
-  return (
-    <div className="mt-2 h-2 rounded-full bg-slate-100">
-      <div className="h-2 rounded-full bg-slate-900" style={{ width: `${p}%` }} />
-    </div>
-  );
-}
-
-function Field({ label, value, onChange, disabled = false }) {
-  return (
-    <div>
-      <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-500">{label}</label>
-      <input
-        className={`h-12 w-full rounded-xl border-2 px-3 text-lg outline-none ${
-          disabled
-            ? "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed"
-            : "border-yellow-400 bg-yellow-100 focus:border-yellow-600"
-        }`}
-        type="number"
-        value={value}
-        disabled={disabled}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder="0"
-      />
-    </div>
-  );
-}
-
-export default function FixedOpsTracker() {
-  const [tab, setTab] = useState("daily");
-  const [loginUsername, setLoginUsername] = useState("");
-  const [loginPassword, setLoginPassword] = useState("");
-  const [loginError, setLoginError] = useState("");
-  const [activeLoginKey, setActiveLoginKey] = useState(null);
-  const [savedPasswords, setSavedPasswords] = useState(loadSavedPasswords);
-  const [showPasswordPanel, setShowPasswordPanel] = useState(false);
-  const [currentPassword, setCurrentPassword] = useState("");
+export default function App() {
+  const [dailyData, setDailyData] = useState(blankStoreData);
+  const [login, setLogin] = useState({ username: "", password: "" });
+  const [user, setUser] = useState(null);
+  const [tab, setTab] = useState("DAILY ENTRY");
+  const [selectedStore, setSelectedStore] = useState(STORES[0]);
+  const [selectedDate, setSelectedDate] = useState(priorOpenBusinessDay());
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [passwordBox, setPasswordBox] = useState(false);
   const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [passwordMessage, setPasswordMessage] = useState("");
-  const [entryError, setEntryError] = useState("");
-  const [selectedStore, setSelectedStore] = useState(stores[0]);
-  const [date, setDate] = useState(priorBusinessDay());
-  const [entries, setEntries] = useState(loadSavedEntries);
 
-  const activeLogin = activeLoginKey ? logins[activeLoginKey] : null;
-  const allowedStores = stores;
-  const store = allowedStores.includes(selectedStore) ? selectedStore : allowedStores[0];
-  const canEditStore = activeLogin?.role === "director" || activeLogin?.store === store;
-  const key = `${store}-${date}`;
-  const current = entries[key] || blank(store, date);
-  const t = timing(date);
-  const monthPercent = t.total > 0 ? (t.passed / t.total) * 100 : 0;
-  const multiplier = t.passed > 0 ? t.total / t.passed : 0;
+  const editableStore = user?.role === "director" ? selectedStore : user?.store;
+  const canEditStore = (store) => user?.role === "director" || user?.store === store;
 
-  const allRows = useMemo(() => Object.values(entries), [entries]);
-  const visibleRows = allRows;
-  const selectedRows = allRows.filter((row) => row.store === store);
-  const monthRows = monthDates(date).map((d) => entries[`${store}-${d}`] || blank(store, d));
+  useEffect(() => {
+    if (!hasSupabase) {
+      setDailyData(readLocalData());
+      setNotice("Supabase is not connected yet. Entries will only save in this browser until Vercel environment variables are added.");
+    }
+  }, []);
 
-  const daily = totalsOf([current]);
-  const selected = totalsOf(selectedRows);
-  const monthly = totalsOf(monthRows);
-  const group = totalsOf(visibleRows);
-
-  const forecast = {
-    labor: selected.labor * multiplier,
-    parts: selected.parts * multiplier,
-    laborGross: selected.laborGross * multiplier,
-    partsGross: selected.partsGross * multiplier,
-    totalGross: selected.totalGross * multiplier,
-    repairOrders: selected.repairOrders * multiplier,
-    hours: selected.hours * multiplier,
-  };
-
-  const forecastTotalSale = forecast.labor + forecast.parts;
-  const groupLaborForecast = group.labor * multiplier;
-  const groupPartsForecast = group.parts * multiplier;
-  const groupLaborGrossForecast = group.laborGross * multiplier;
-  const groupPartsGrossForecast = group.partsGross * multiplier;
-  const groupSaleForecast = group.totalSale * multiplier;
-  const groupGrossForecast = group.totalGross * multiplier;
-  const groupLaborGrossPct = group.labor > 0 ? (group.laborGross / group.labor) * 100 : 0;
-  const groupPartsGrossPct = group.parts > 0 ? (group.partsGross / group.parts) * 100 : 0;
-
-  const update = (field, value) => {
-    const nextEntry = { ...(entries[key] || blank(store, date)), [field]: value };
-    const labor = toNum(nextEntry.labor);
-    const laborGross = toNum(nextEntry.laborGross);
-    const parts = toNum(nextEntry.parts);
-    const partsGross = toNum(nextEntry.partsGross);
-
-    if (laborGross > labor && labor > 0) {
-      setEntryError("Labor Gross cannot be higher than Total Labor.");
+  async function loadCloudEntries() {
+    if (!hasSupabase) return;
+    setLoading(true);
+    setError("");
+    const { data, error: dbError } = await supabase.from("daily_entries").select("*").order("entry_date", { ascending: true });
+    setLoading(false);
+    if (dbError) {
+      setError(`Could not load saved entries from Supabase: ${dbError.message}`);
       return;
     }
-
-    if (partsGross > parts && parts > 0) {
-      setEntryError("Parts Gross cannot be higher than Total Parts.");
-      return;
-    }
-
-    setEntryError("");
-    setEntries((prev) => {
-      const updatedEntries = {
-        ...prev,
-        [key]: nextEntry,
-      };
-      saveEntries(updatedEntries);
-      return updatedEntries;
+    const next = blankStoreData();
+    (data || []).forEach((row) => {
+      if (!next[row.store]) next[row.store] = {};
+      next[row.store][row.entry_date] = toAppEntry(row);
     });
+    setDailyData(next);
+    setNotice("Connected to Supabase. Entries are saving online.");
+  }
+
+  const handleLogin = async () => {
+    const username = login.username.trim().toLowerCase();
+    setError("");
+    setNotice("");
+
+    if (hasSupabase) {
+      const { data, error: dbError } = await supabase
+        .from("dealer_users")
+        .select("*")
+        .eq("username", username)
+        .single();
+
+      if (dbError || !data || data.password_plain !== login.password) {
+        setError("Login failed. Please check username and password.");
+        return;
+      }
+
+      setUser({
+        username: data.username,
+        name: data.name,
+        role: data.role,
+        store: data.store,
+      });
+      setSelectedStore(data.role === "director" ? STORES[0] : data.store);
+      await loadCloudEntries();
+      return;
+    }
+
+    const found = DEFAULT_USERS[username];
+    if (!found || found.password_plain !== login.password) {
+      setError("Login failed. Please check username and password.");
+      return;
+    }
+    setUser({ username, name: found.name, role: found.role, store: found.store });
+    setSelectedStore(found.role === "director" ? STORES[0] : found.store);
   };
 
-  const handleLogin = (event) => {
-    event.preventDefault();
-    const found = Object.entries(logins).find(
-      ([loginKey, account]) =>
-        account.username.toLowerCase() === loginUsername.trim().toLowerCase() &&
-        savedPasswords[loginKey] === loginPassword
+  const handlePasswordChange = async () => {
+    if (!newPassword.trim()) {
+      setError("Password cannot be blank.");
+      return;
+    }
+
+    if (hasSupabase) {
+      const { error: dbError } = await supabase
+        .from("dealer_users")
+        .update({ password_plain: newPassword.trim(), updated_at: new Date().toISOString() })
+        .eq("username", user.username);
+
+      if (dbError) {
+        setError(`Could not update password: ${dbError.message}`);
+        return;
+      }
+
+      setNewPassword("");
+      setPasswordBox(false);
+      setNotice("Password updated in Supabase.");
+      setError("");
+      return;
+    }
+
+    setNewPassword("");
+    setPasswordBox(false);
+    setNotice("Password updated only for this prototype session. Connect Supabase for online password storage.");
+  };
+
+  const updateEntry = async (field, value) => {
+    const store = editableStore;
+    const numeric = Number(value || 0);
+    const existing = dailyData[store]?.[selectedDate] || {};
+    const proposed = { ...existing, [field]: numeric };
+
+    if (Number(proposed.laborGross || 0) > Number(proposed.labor || 0)) {
+      setError("Labor Gross cannot be higher than Total Labor.");
+      return;
+    }
+    if (Number(proposed.partsGross || 0) > Number(proposed.parts || 0)) {
+      setError("Parts Gross cannot be higher than Total Parts.");
+      return;
+    }
+
+    const next = {
+      ...dailyData,
+      [store]: {
+        ...(dailyData[store] || {}),
+        [selectedDate]: proposed,
+      },
+    };
+
+    setDailyData(next);
+    setError("");
+
+    if (hasSupabase) {
+      const payload = toDbEntry(store, selectedDate, proposed);
+      const { error: dbError } = await supabase
+        .from("daily_entries")
+        .upsert(payload, { onConflict: "store,entry_date" });
+
+      if (dbError) {
+        setError(`Could not save to Supabase: ${dbError.message}`);
+        return;
+      }
+      setNotice("Saved online.");
+    } else {
+      writeLocalData(next);
+      setNotice("Saved in this browser only. Add Supabase keys in Vercel for permanent cloud saving.");
+    }
+  };
+
+  const totalsByStore = useMemo(() => {
+    return STORES.reduce((acc, store) => {
+      const entries = Object.values(dailyData[store] || {});
+      acc[store] = entries.reduce(
+        (t, e) => {
+          fields.forEach((f) => (t[f.key] += Number(e[f.key] || 0)));
+          return t;
+        },
+        { ros: 0, hours: 0, labor: 0, laborGross: 0, parts: 0, partsGross: 0 }
+      );
+      return acc;
+    }, {});
+  }, [dailyData]);
+
+  const groupTotals = useMemo(() => {
+    return STORES.reduce(
+      (t, store) => {
+        const s = totalsByStore[store];
+        fields.forEach((f) => (t[f.key] += Number(s[f.key] || 0)));
+        return t;
+      },
+      { ros: 0, hours: 0, labor: 0, laborGross: 0, parts: 0, partsGross: 0 }
     );
+  }, [totalsByStore]);
 
-    if (!found) {
-      setLoginError("Invalid username or password");
-      return;
-    }
-
-    const [loginKey, account] = found;
-    setActiveLoginKey(loginKey);
-    setLoginError("");
-    if (account.role === "dealer") setSelectedStore(account.store);
+  const metricCards = (totals) => {
+    const totalSales = totals.labor + totals.parts;
+    const totalGross = totals.laborGross + totals.partsGross;
+    const elr = totals.hours ? totals.labor / totals.hours : 0;
+    const grossPerRo = totals.ros ? totalGross / totals.ros : 0;
+    const plRatio = totals.labor ? totals.parts / totals.labor : 0;
+    const grossPct = totalSales ? (totalGross / totalSales) * 100 : 0;
+    return [
+      ["Total RO's", number(totals.ros)],
+      ["Total Hours", number(totals.hours)],
+      ["Total Labor", money(totals.labor)],
+      ["Total Parts", money(totals.parts)],
+      ["Total Parts and Service", money(totalSales)],
+      ["Month End Tracking", money(totalGross)],
+      ["ELR", money(elr)],
+      ["Gross Per RO", money(grossPerRo)],
+      ["Parts-to-Labor Ratio", `${plRatio.toFixed(2)}:1`],
+      ["Gross Profit %", pct(grossPct)],
+    ];
   };
 
-  const logout = () => {
-    setActiveLoginKey(null);
-    setLoginUsername("");
-    setLoginPassword("");
-    setLoginError("");
-    setShowPasswordPanel(false);
-    setCurrentPassword("");
-    setNewPassword("");
-    setConfirmPassword("");
-    setPasswordMessage("");
-  };
-
-  const changePassword = (event) => {
-    event.preventDefault();
-    setPasswordMessage("");
-
-    if (savedPasswords[activeLoginKey] !== currentPassword) {
-      setPasswordMessage("Current password is incorrect.");
-      return;
-    }
-
-    if (newPassword.length < 6) {
-      setPasswordMessage("New password must be at least 6 characters.");
-      return;
-    }
-
-    if (newPassword !== confirmPassword) {
-      setPasswordMessage("New passwords do not match.");
-      return;
-    }
-
-    const updatedPasswords = { ...savedPasswords, [activeLoginKey]: newPassword };
-    setSavedPasswords(updatedPasswords);
-    savePasswords(updatedPasswords);
-    setCurrentPassword("");
-    setNewPassword("");
-    setConfirmPassword("");
-    setPasswordMessage("Password updated for this login.");
-  };
-
-  if (!activeLogin) {
+  if (!user) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 p-4 text-slate-950">
-        <Card className="w-full max-w-md p-8">
-          <div className="text-center">
-            <h1 className="text-3xl font-extrabold tracking-tight">Dealer Operating Control Service</h1>
-            <p className="mt-2 text-sm text-slate-500">Fixed Ops Daily Tracker login</p>
+      <div className="min-h-screen bg-slate-100 flex items-center justify-center p-6">
+        <div className="bg-white rounded-3xl shadow-xl p-8 w-full max-w-md border border-slate-200">
+          <h1 className="text-3xl font-bold text-slate-900">Fixed Ops Tracker</h1>
+          <p className="text-slate-600 mt-2">Dealer Operating Control Service</p>
+
+          {!hasSupabase && (
+            <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 text-amber-800 p-3 text-sm">
+              Supabase is not connected yet. Add the Vercel environment variables after creating your Supabase project.
+            </div>
+          )}
+
+          <div className="mt-6 space-y-4">
+            <input className="w-full border rounded-xl p-3" placeholder="Username" value={login.username} onChange={(e) => setLogin({ ...login, username: e.target.value })} />
+            <input className="w-full border rounded-xl p-3" placeholder="Password" type="password" value={login.password} onChange={(e) => setLogin({ ...login, password: e.target.value })} />
+            {error && <div className="text-red-700 bg-red-50 rounded-xl p-3 text-sm">{error}</div>}
+            <button className="w-full bg-slate-900 text-white rounded-xl p-3 font-semibold" onClick={handleLogin}>Login</button>
           </div>
 
-          <form onSubmit={handleLogin} className="mt-8 space-y-4">
-            <div>
-              <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-500">Username</label>
-              <input
-                className="h-12 w-full rounded-xl border border-slate-300 bg-white px-3 text-lg outline-none focus:border-slate-900"
-                value={loginUsername}
-                onChange={(event) => setLoginUsername(event.target.value)}
-                placeholder="richard"
-              />
-            </div>
-            <div>
-              <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-500">Password</label>
-              <input
-                className="h-12 w-full rounded-xl border border-slate-300 bg-white px-3 text-lg outline-none focus:border-slate-900"
-                type="password"
-                value={loginPassword}
-                onChange={(event) => setLoginPassword(event.target.value)}
-                placeholder="director123"
-              />
-            </div>
-            {loginError && <p className="rounded-xl bg-red-100 px-4 py-3 text-sm font-bold text-red-700">{loginError}</p>}
-            <button className="h-12 w-full rounded-xl bg-slate-900 text-sm font-extrabold uppercase tracking-wide text-white shadow-sm" type="submit">
-              Login
-            </button>
-          </form>
-
-          <div className="mt-6 rounded-2xl bg-slate-100 p-4 text-sm text-slate-600">
-            <p className="font-bold text-slate-800">Demo logins</p>
-            <p className="mt-2">Director: richard / director123</p>
-            <p>Honda: pasadena / pasadena123</p>
-            <p>Seattle: seattle / seattle123</p>
-            <p>El Cajon: elcajon / elcajon123</p>
-            <p>Brandon: brandon / brandon123</p>
-            <p>Friendly: friendly / friendly123</p>
+          <div className="mt-6 text-xs text-slate-500 leading-6">
+            Director demo: richard / director123<br />
+            Dealer demos: pasadena, seattle, elcajon, brandon, friendly / matching password + 123
           </div>
-        </Card>
+        </div>
       </div>
     );
   }
 
+  const currentEntry = dailyData[editableStore]?.[selectedDate] || {};
+
   return (
-    <div className="min-h-screen bg-slate-50 p-4 text-slate-950 md:p-8">
-      <div className="mx-auto max-w-7xl">
-        <div className="mb-6 text-center">
-          <h2 className="text-4xl font-extrabold tracking-tight">Dealer Operating Control Service</h2>
-        </div>
-
-        <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+    <div className="min-h-screen bg-slate-100 p-4 md:p-8 text-slate-900">
+      <div className="max-w-7xl mx-auto">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
           <div>
-            <h1 className="text-3xl font-bold">Fixed Ops Daily Tracker</h1>
-            <p className="text-sm text-slate-500">Daily entry, monthly summary, MTD tracking, and director overview.</p>
-            <p className="mt-2 text-sm font-bold text-slate-700">Logged in as: {activeLogin.name}</p>
+            <h1 className="text-3xl md:text-4xl font-bold">Fixed Ops Tracker</h1>
+            <p className="text-slate-600">Logged in as {user.name}</p>
           </div>
-          <div className="flex flex-col items-start gap-3 md:items-end">
-            <div className="rounded-2xl border-2 border-yellow-400 bg-yellow-100 px-6 py-4 text-center shadow-sm">
-              <p className="text-xs font-bold uppercase tracking-wide text-slate-600">Current Month</p>
-              <p className="mt-1 text-3xl font-extrabold text-slate-950">{fmtMonth(date)}</p>
-            </div>
-            <div className="flex gap-2">
-              <button
-                className="h-11 rounded-xl border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50"
-                onClick={() => {
-                  setShowPasswordPanel((value) => !value);
-                  setPasswordMessage("");
-                }}
-              >
-                Change Password
-              </button>
-              <button className="h-11 rounded-xl border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50" onClick={logout}>
-                Logout
-              </button>
-            </div>
+          <div className="flex gap-2 flex-wrap">
+            <button className="bg-white border rounded-xl px-4 py-2 shadow-sm" onClick={() => setPasswordBox(!passwordBox)}>Change Password</button>
+            <button className="bg-white border rounded-xl px-4 py-2 shadow-sm" onClick={loadCloudEntries} disabled={!hasSupabase || loading}>{loading ? "Refreshing..." : "Refresh Data"}</button>
+            <button className="bg-slate-900 text-white rounded-xl px-4 py-2" onClick={() => setUser(null)}>Logout</button>
           </div>
         </div>
 
-        <Card className="mb-6 p-5">
-          <div className="grid gap-4 md:grid-cols-4">
-            <div className="md:col-span-2">
-              <label className="mb-2 block text-xs font-bold uppercase text-slate-500">Dealership</label>
-              <select
-                className="h-11 w-full rounded-xl border border-slate-300 bg-white px-3"
-                value={store}
-                disabled={false}
-                onChange={(event) => setSelectedStore(event.target.value)}
-              >
-                {allowedStores.map((storeName) => <option key={storeName}>{storeName}</option>)}
-              </select>
-            </div>
-            <Stat title="Working Days Passed" value={qty(t.passed)} />
-            <Stat title="Working Days In Month" value={qty(t.total)} />
+        {passwordBox && (
+          <div className="bg-white rounded-2xl border p-4 mb-5 shadow-sm flex flex-col md:flex-row gap-3">
+            <input className="border rounded-xl p-3 flex-1" type="password" placeholder="New password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+            <button className="bg-slate-900 text-white rounded-xl px-5" onClick={handlePasswordChange}>Save Password</button>
           </div>
-          <div className="mt-5">
-            <div className="flex justify-between text-sm">
-              <p className="font-semibold">Working Month Progress</p>
-              <p>{qty(monthPercent, 1)}% complete · {qty(t.closed)} closed days excluded</p>
-            </div>
-            <Progress percent={monthPercent} />
-          </div>
-        </Card>
-
-        {showPasswordPanel && (
-          <Card className="mb-6 p-5">
-            <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-              <div>
-                <h2 className="text-xl font-bold">Change Password</h2>
-                <p className="text-sm text-slate-500">Update the password for {activeLogin.name}.</p>
-              </div>
-              <p className="rounded-xl bg-yellow-100 px-4 py-3 text-sm font-bold text-slate-700">
-                Prototype password storage is browser-based.
-              </p>
-            </div>
-
-            <form onSubmit={changePassword} className="mt-5 grid gap-4 md:grid-cols-4">
-              <div>
-                <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-500">Current Password</label>
-                <input
-                  className="h-12 w-full rounded-xl border border-slate-300 bg-white px-3 text-lg outline-none focus:border-slate-900"
-                  type="password"
-                  value={currentPassword}
-                  onChange={(event) => setCurrentPassword(event.target.value)}
-                />
-              </div>
-              <div>
-                <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-500">New Password</label>
-                <input
-                  className="h-12 w-full rounded-xl border border-slate-300 bg-white px-3 text-lg outline-none focus:border-slate-900"
-                  type="password"
-                  value={newPassword}
-                  onChange={(event) => setNewPassword(event.target.value)}
-                />
-              </div>
-              <div>
-                <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-500">Confirm New Password</label>
-                <input
-                  className="h-12 w-full rounded-xl border border-slate-300 bg-white px-3 text-lg outline-none focus:border-slate-900"
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(event) => setConfirmPassword(event.target.value)}
-                />
-              </div>
-              <div className="flex items-end">
-                <button className="h-12 w-full rounded-xl bg-slate-900 text-sm font-extrabold uppercase tracking-wide text-white shadow-sm" type="submit">
-                  Save Password
-                </button>
-              </div>
-            </form>
-            {passwordMessage && (
-              <p className={`mt-4 rounded-xl px-4 py-3 text-sm font-bold ${passwordMessage.includes("updated") ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
-                {passwordMessage}
-              </p>
-            )}
-          </Card>
         )}
 
-        <div className="mb-6 grid gap-3 rounded-3xl border border-slate-200 bg-white p-3 shadow-sm md:grid-cols-4">
-          {[
-            ["daily", "DAILY ENTRY"],
-            ["weekly", "MONTHLY SUMMARY"],
-            ["forecast", "MTD & TRACKING"],
-            ["director", "GROUP OVERVIEW"],
-          ].map(([tabKey, label]) => (
-            <button
-              key={tabKey}
-              onClick={() => setTab(tabKey)}
-              className={`rounded-2xl border-2 px-4 py-3 text-sm font-extrabold uppercase tracking-wide shadow-sm transition ${
-                tab === tabKey
-                  ? "border-slate-900 bg-slate-900 text-white"
-                  : "border-slate-200 bg-slate-50 text-slate-700 hover:border-slate-400 hover:bg-white"
-              }`}
-            >
-              {label}
-            </button>
+        {error && <div className="mb-5 text-red-700 bg-red-50 rounded-xl p-3 border border-red-100">{error}</div>}
+        {notice && <div className="mb-5 text-emerald-800 bg-emerald-50 rounded-xl p-3 border border-emerald-100">{notice}</div>}
+
+        <div className="flex flex-wrap gap-2 mb-6">
+          {["DAILY ENTRY", "MONTHLY SUMMARY", "MTD & TRACKING", "DIRECTOR OVERVIEW"].map((t) => (
+            <button key={t} onClick={() => setTab(t)} className={`rounded-2xl border px-5 py-3 font-bold shadow-sm ${tab === t ? "bg-slate-900 text-white" : "bg-white text-slate-800"}`}>{t}</button>
           ))}
         </div>
 
-        {tab === "daily" && (
-          <DailyTab current={current} date={date} setDate={setDate} update={update} daily={daily} canEditStore={canEditStore} activeLogin={activeLogin} store={store} entryError={entryError} />
-        )}
-
-        {tab === "weekly" && (
-          <MonthlyTab monthRows={monthRows} monthly={monthly} selected={selected} forecast={forecast} multiplier={multiplier} group={group} store={store} date={date} />
-        )}
-
-        {tab === "forecast" && (
-          <ForecastTab selected={selected} forecast={forecast} forecastTotalSale={forecastTotalSale} group={group} monthPercent={monthPercent} store={store} date={date} />
-        )}
-
-        {tab === "director" && (
-          <DirectorTab
-            allowedStores={allowedStores}
-            stores={stores}
-            visibleRows={visibleRows}
-            group={group}
-            monthPercent={monthPercent}
-            groupLaborForecast={groupLaborForecast}
-            groupPartsForecast={groupPartsForecast}
-            groupLaborGrossForecast={groupLaborGrossForecast}
-            groupPartsGrossForecast={groupPartsGrossForecast}
-            groupSaleForecast={groupSaleForecast}
-            groupGrossForecast={groupGrossForecast}
-            groupLaborGrossPct={groupLaborGrossPct}
-            groupPartsGrossPct={groupPartsGrossPct}
-          />
-        )}
-      </div>
-    </div>
-  );
-}
-
-function DailyTab({ current, date, setDate, update, daily, canEditStore, activeLogin, store, entryError }) {
-  return (
-    <div className="space-y-6">
-      <Card className="p-5">
-        <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-          <div>
-            <h2 className="text-xl font-bold">Daily Entry</h2>
-            <p className="text-sm text-slate-500">Enter numbers for the prior open business day. Sundays and holidays are skipped automatically.</p>
-            {!canEditStore && (
-              <p className="mt-2 rounded-xl bg-slate-100 px-4 py-3 text-sm font-bold text-slate-600">
-                Read only: {activeLogin.name} can view {store}, but can only edit {activeLogin.store}.
-              </p>
-            )}
-            {entryError && (
-              <p className="mt-2 rounded-xl bg-red-100 px-4 py-3 text-sm font-bold text-red-700">
-                {entryError}
-              </p>
-            )}
-          </div>
-          <div>
-            <label className="mb-2 block text-xs font-bold uppercase text-slate-500">Prior Business Day Entry Date</label>
-            <input className="h-11 rounded-xl border border-slate-300 px-3" type="date" value={date} onChange={(event) => setDate(event.target.value)} />
-          </div>
-        </div>
-        <div className="grid gap-4 md:grid-cols-3">
-          <Field label="Total Repair Orders" value={current.repairOrders} disabled={!canEditStore} onChange={(value) => update("repairOrders", value)} />
-          <Field label="Total Hours" value={current.hours} disabled={!canEditStore} onChange={(value) => update("hours", value)} />
-          <Field label="Total Labor" value={current.labor} disabled={!canEditStore} onChange={(value) => update("labor", value)} />
-          <Field label="Total Parts" value={current.parts} disabled={!canEditStore} onChange={(value) => update("parts", value)} />
-          <Field label="Total Labor Gross" value={current.laborGross} disabled={!canEditStore} onChange={(value) => update("laborGross", value)} />
-          <Field label="Total Parts Gross" value={current.partsGross} disabled={!canEditStore} onChange={(value) => update("partsGross", value)} />
-        </div>
-      </Card>
-
-      <div className="grid gap-4 md:grid-cols-6">
-        <Stat title="Daily ELR" value={money(daily.elr)} sub="Labor ÷ Hours" />
-        <Stat title="Labor Total" value={money(daily.labor)} />
-        <Stat title="Parts Total" value={money(daily.parts)} />
-        <Stat title="Labor Gross" value={money(daily.laborGross)} />
-        <Stat title="Parts Gross" value={money(daily.partsGross)} />
-        <Stat title="Daily Gross" value={money(daily.totalGross)} />
-      </div>
-    </div>
-  );
-}
-
-function MonthlyTab({ monthRows, monthly, selected, forecast, multiplier, group, store, date }) {
-  const monthEndTracking = forecast.labor + forecast.parts;
-
-  return (
-    <div className="space-y-6">
-      <div className="grid gap-4 md:grid-cols-5">
-        <Stat title="Month ROs" value={qty(monthly.repairOrders)} sub={`Tracking: ${qty(selected.repairOrders * multiplier)}`} />
-        <Stat title="Month Hours" value={qty(monthly.hours, 1)} sub={`Tracking: ${qty(selected.hours * multiplier, 1)}`} />
-        <Stat title="Month Labor" value={money(monthly.labor)} sub={`Tracking: ${money(forecast.labor)}`} />
-        <Stat title="Month Parts" value={money(monthly.parts)} sub={`Tracking: ${money(forecast.parts)}`} />
-        <Stat title="Month ELR" value={money(monthly.elr)} sub={`Group ELR: ${money(group.elr)}`}>
-          <Badge value={monthly.elr} benchmark={group.elr} />
-        </Stat>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2">
-        <Stat title="Total Parts and Service" value={money(monthly.totalSale)} sub="Labor + Parts" className="md:min-h-[150px] md:p-8" />
-        <Stat title="Month End Tracking" value={money(monthEndTracking)} sub="Parts and service tracking" className="md:min-h-[150px] md:p-8" />
-      </div>
-
-      <Card className="overflow-visible p-0">
-        <div className="sticky top-0 z-30 rounded-t-2xl border-b border-slate-200 bg-white px-5 pb-3 pt-5 shadow-sm">
-          <h2 className="text-xl font-bold">Monthly Summary — {store}</h2>
-          <p className="mt-1 text-sm text-slate-500">{fmtMonth(date)}</p>
-        </div>
-        <div className="px-5 pb-5">
-          <div className="mt-5 max-h-[560px] overflow-auto rounded-xl border border-slate-200">
-            <table className="w-full min-w-[900px] text-sm">
-              <thead>
-                <tr className="border-b text-left text-xs uppercase text-slate-500">
-                  {['Date', 'Status', 'ROs', 'Hours', 'Labor', 'Parts', 'Labor Gross', 'Parts Gross', 'ELR'].map((heading) => (
-                    <th key={heading} className="sticky top-0 z-30 bg-white p-3 shadow-sm">{heading}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {monthRows.map((row) => {
-                  const rowTotals = totalsOf([row]);
-                  const status = dayStatus(row.date);
-                  return (
-                    <tr key={row.id} className={`border-b ${status.closed ? "bg-slate-100 text-slate-500" : ""}`}>
-                      <td className="p-3 font-semibold">{fmtDate(row.date)}</td>
-                      <td className="p-3">{status.reason}</td>
-                      <td className="p-3">{qty(rowTotals.repairOrders)}</td>
-                      <td className="p-3">{qty(rowTotals.hours, 1)}</td>
-                      <td className="p-3">{money(rowTotals.labor)}</td>
-                      <td className="p-3">{money(rowTotals.parts)}</td>
-                      <td className="p-3">{money(rowTotals.laborGross)}</td>
-                      <td className="p-3">{money(rowTotals.partsGross)}</td>
-                      <td className="p-3">{money(rowTotals.elr)}{rowTotals.hours > 0 && !status.closed ? <Badge value={rowTotals.elr} benchmark={group.elr} /> : null}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </Card>
-    </div>
-  );
-}
-
-function ForecastTab({ selected, forecast, forecastTotalSale, group, monthPercent, store, date }) {
-  return (
-    <div className="space-y-6">
-      <div className="grid gap-4 md:grid-cols-2">
-        <Stat title="MTD Parts and Service Total" value={money(selected.totalSale)} sub={`${qty(monthPercent, 1)}% of month passed`}>
-          <div className="mt-4 rounded-xl bg-slate-100 p-5">
-            <p className="font-bold text-slate-500">Service Sale: {money(selected.labor)} · Gross: {money(selected.laborGross)}</p>
-            <p className="mt-2 font-bold text-slate-500">Parts Sale: {money(selected.parts)} · Gross: {money(selected.partsGross)}</p>
-            <p className="mt-3 border-t pt-3 font-extrabold">Combined Gross: {money(selected.totalGross)}</p>
-          </div>
-        </Stat>
-        <Stat title="Month End Tracking Parts & Service" value={money(forecastTotalSale)}>
-          <div className="mt-4 rounded-xl bg-slate-100 p-5">
-            <p className="font-bold text-slate-500">Service Tracking: {money(forecast.labor)} · Gross: {money(forecast.laborGross)}</p>
-            <p className="mt-2 font-bold text-slate-500">Parts Tracking: {money(forecast.parts)} · Gross: {money(forecast.partsGross)}</p>
-            <p className="mt-3 border-t pt-3 font-extrabold">Combined Gross Tracking: {money(forecast.totalGross)}</p>
-          </div>
-        </Stat>
-      </div>
-
-      <Card className="p-5">
-        <h2 className="text-xl font-bold">MTD & Tracking — {store}</h2>
-        <p className="mt-1 text-sm text-slate-500">{fmtMonth(date)}</p>
-        <div className="mt-5 grid gap-4 md:grid-cols-3">
-          <Stat title="Total ROs" value={qty(forecast.repairOrders)} />
-          <Stat title="Total Hours" value={qty(forecast.hours, 1)} />
-          <Stat title="Total Labor" value={money(forecast.labor)} />
-          <Stat title="Total Parts" value={money(forecast.parts)} />
-          <Stat title="Current ELR" value={money(selected.elr)} sub={`Group ELR: ${money(group.elr)}`}>
-            <Badge value={selected.elr} benchmark={group.elr} />
-          </Stat>
-          <Stat title="Gross Per RO" value={money(selected.grossPerRo)} sub={`Group Avg: ${money(group.grossPerRo)}`}>
-            <Badge value={selected.grossPerRo} benchmark={group.grossPerRo} />
-          </Stat>
-          <Stat title="Parts to Labor Ratio" value={`${qty(selected.partsToLabor * 100, 1)}%`} sub={`Group Avg: ${qty(group.partsToLabor * 100, 1)}%`}>
-            <Badge value={selected.partsToLabor} benchmark={group.partsToLabor} />
-          </Stat>
-        </div>
-      </Card>
-    </div>
-  );
-}
-
-function DirectorTab({ allowedStores, stores, visibleRows, group, monthPercent, groupLaborForecast, groupPartsForecast, groupLaborGrossForecast, groupPartsGrossForecast, groupSaleForecast, groupGrossForecast, groupLaborGrossPct, groupPartsGrossPct }) {
-  return (
-    <div className="space-y-6">
-      <div className="grid gap-4 md:grid-cols-4">
-        <Stat title="Group Repair Orders" value={qty(group.repairOrders)} />
-        <Stat title="Group ELR" value={money(group.elr)} />
-        <Stat title="Group Avg Gross Per RO" value={money(group.grossPerRo)} />
-        <Stat title="Group Avg Parts/Labor" value={`${qty(group.partsToLabor * 100, 1)}%`} sub="Parts sale ÷ labor sale" />
-        <Stat title="Group Labor Sale" value={money(group.labor)} sub={`Tracking: ${money(groupLaborForecast)}`} />
-        <Stat title="Group Labor Gross" value={money(group.laborGross)} sub={`Tracking: ${money(groupLaborGrossForecast)}`}>
-          <p className="mt-2 text-sm font-semibold text-slate-500">Gross Profit %: {qty(groupLaborGrossPct, 2)}%</p>
-        </Stat>
-        <div className="md:col-span-2 md:row-span-2">
-          <Card className="h-full p-8">
-            <div className="flex h-full min-h-[330px] flex-col items-center justify-center text-center">
-              <p className="text-xl font-bold text-slate-500">Parts and Service Summary</p>
-              <div className="mt-6 w-full space-y-5 rounded-2xl bg-slate-100 px-6 py-6">
-                <SummaryLine label="Total Sale" value={money(group.totalSale)} />
-                <SummaryLine label="Total Gross" value={money(group.totalGross)} />
-                <SummaryLine label="Tracking End of Month" value={money(groupSaleForecast)} />
-                <SummaryLine label="Tracking Gross End of Month" value={money(groupGrossForecast)} />
+        {tab === "DAILY ENTRY" && (
+          <div className="bg-white rounded-3xl shadow p-6 border">
+            <div className="flex flex-col md:flex-row gap-4 md:items-end mb-6">
+              <div className="flex-1">
+                <label className="text-sm font-semibold text-slate-600">Store</label>
+                <select className="w-full border rounded-xl p-3 mt-1" value={editableStore} disabled={user.role !== "director"} onChange={(e) => setSelectedStore(e.target.value)}>
+                  {STORES.map((s) => <option key={s}>{s}</option>)}
+                </select>
+              </div>
+              <div className="flex-1">
+                <label className="text-sm font-semibold text-slate-600">Working Day</label>
+                <input className="w-full border rounded-xl p-3 mt-1" type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} />
+                <p className="text-xs text-slate-500 mt-1">Defaults to the previous open business day. Sundays and holidays are skipped.</p>
               </div>
             </div>
-          </Card>
-        </div>
-        <Stat title="Group Parts Sale" value={money(group.parts)} sub={`Tracking: ${money(groupPartsForecast)}`} />
-        <Stat title="Group Parts Gross" value={money(group.partsGross)} sub={`Tracking: ${money(groupPartsGrossForecast)}`}>
-          <p className="mt-2 text-sm font-semibold text-slate-500">Gross Profit %: {qty(groupPartsGrossPct, 2)}%</p>
-        </Stat>
-      </div>
+            <div className="grid md:grid-cols-3 gap-4">
+              {fields.map((f) => (
+                <div key={f.key} className="rounded-2xl border p-4 bg-yellow-50">
+                  <label className="font-bold text-sm text-slate-700">{f.label}</label>
+                  <input className="w-full border rounded-xl p-3 mt-2 bg-white" type="number" min="0" value={currentEntry[f.key] ?? ""} disabled={!canEditStore(editableStore)} onChange={(e) => updateEntry(f.key, e.target.value)} />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
-      <Card className="p-5">
-        <h2 className="mb-4 text-xl font-bold">GROUP OVERVIEW — Store Running Totals</h2>
-        <p className="mb-4 text-sm text-slate-500">Dealers are shown side by side in their own boxes so each store can compare performance against the group.</p>
-        <div className="overflow-x-auto">
-          <div className="flex gap-4 pb-2">
-            {stores.filter((storeName) => allowedStores.includes(storeName)).map((storeName) => {
-              const storeTotals = totalsOf(visibleRows.filter((row) => row.store === storeName));
+        {tab === "MONTHLY SUMMARY" && (
+          <div className="space-y-6">
+            {STORES.map((store) => (
+              <div key={store} className="bg-white rounded-3xl shadow p-6 border">
+                <h2 className="text-2xl font-bold mb-4">{store}</h2>
+                <div className="grid md:grid-cols-5 gap-4">
+                  {metricCards(totalsByStore[store]).slice(0, 5).map(([label, value]) => <Bubble key={label} label={label} value={value} />)}
+                </div>
+                <div className="grid md:grid-cols-2 gap-4 mt-4">
+                  {metricCards(totalsByStore[store]).slice(5, 7).map(([label, value]) => <Bubble key={label} label={label} value={value} large />)}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {tab === "MTD & TRACKING" && (
+          <div className="grid lg:grid-cols-2 gap-5">
+            {STORES.map((store) => {
+              const t = totalsByStore[store];
               return (
-                <Card key={storeName} className="min-w-[260px] bg-slate-50 p-5 shadow-none">
-                  <div className="mb-4 flex items-center justify-between gap-3">
-                    <h3 className="text-lg font-bold">{storeName}</h3>
-                    <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 shadow-sm">{qty(monthPercent, 1)}% month</span>
+                <div key={store} className="bg-white rounded-3xl shadow p-6 border">
+                  <h2 className="text-2xl font-bold mb-4">{store}</h2>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Stat label="Service Tracking" value={money(t.laborGross)} />
+                    <Stat label="Parts Tracking" value={money(t.partsGross)} />
+                    <Stat label="Total ROs" value={number(t.ros)} />
+                    <Stat label="Total Hours" value={number(t.hours)} />
+                    <Stat label="Total Labor" value={money(t.labor)} />
+                    <Stat label="Total Parts" value={money(t.parts)} />
+                    <Stat label="Month End Tracking Parts & Service" value={money(t.labor + t.parts)} wide />
+                    <Stat label="Tracking Gross End of Month" value={money(t.laborGross + t.partsGross)} wide />
                   </div>
-                  <div className="space-y-3 text-sm">
-                    <StoreBox label="MTD ROs" value={qty(storeTotals.repairOrders)} />
-                    <StoreBox label="Hours" value={qty(storeTotals.hours, 1)} />
-                    <StoreBox label="Labor Sales" value={money(storeTotals.labor)} />
-                    <StoreBox label="Parts Sales" value={money(storeTotals.parts)} />
-                    <StoreBox label="Labor Gross" value={money(storeTotals.laborGross)} />
-                    <StoreBox label="Parts Gross" value={money(storeTotals.partsGross)} />
-                    <StoreBox label="ELR" value={money(storeTotals.elr)} badge={<Badge value={storeTotals.elr} benchmark={group.elr} />} sub={`Group ELR: ${money(group.elr)}`} />
-                    <StoreBox label="Gross Per RO" value={money(storeTotals.grossPerRo)} badge={<Badge value={storeTotals.grossPerRo} benchmark={group.grossPerRo} />} sub={`Group Avg: ${money(group.grossPerRo)}`} />
-                    <StoreBox label="Parts/Labor" value={`${qty(storeTotals.partsToLabor * 100, 1)}%`} badge={<Badge value={storeTotals.partsToLabor} benchmark={group.partsToLabor} />} sub={`Group Avg: ${qty(group.partsToLabor * 100, 1)}%`} />
-                    <StoreBox label="Month Progress" value={`${qty(monthPercent, 1)}%`} />
-                  </div>
-                  <Progress percent={monthPercent} />
-                </Card>
+                </div>
               );
             })}
           </div>
-        </div>
-      </Card>
+        )}
+
+        {tab === "DIRECTOR OVERVIEW" && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-3xl shadow p-6 border">
+              <h2 className="text-2xl font-bold mb-4">Group Overview</h2>
+              <div className="grid md:grid-cols-5 gap-4">
+                {metricCards(groupTotals).slice(0, 5).map(([label, value]) => <Bubble key={label} label={label} value={value} />)}
+              </div>
+              <div className="grid md:grid-cols-2 gap-4 mt-4">
+                <Bubble label="Total Parts and Service" value={money(groupTotals.labor + groupTotals.parts)} large />
+                <Bubble label="Month End Tracking" value={money(groupTotals.laborGross + groupTotals.partsGross)} large />
+              </div>
+            </div>
+
+            <div className="grid md:grid-cols-5 gap-4 items-stretch">
+              {STORES.map((store) => {
+                const t = totalsByStore[store];
+                return (
+                  <div key={store} className="bg-white rounded-3xl shadow p-4 border flex flex-col">
+                    <h3 className="font-bold text-lg mb-3 min-h-[56px]">{store}</h3>
+                    <div className="space-y-2 text-sm">
+                      <Stat label="ROs" value={number(t.ros)} />
+                      <Stat label="Hours" value={number(t.hours)} />
+                      <Stat label="Group Labor Sale" value={money(t.labor)} />
+                      <Stat label="Group Parts Sale" value={money(t.parts)} />
+                      <Stat label="Tracking End of Month" value={money(t.labor + t.parts)} />
+                      <Stat label="Tracking Gross End of Month" value={money(t.laborGross + t.partsGross)} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="bg-white rounded-3xl shadow p-6 border">
+              <h2 className="text-2xl font-bold mb-4">Parts and Service Summary</h2>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left border-b">
+                      <th className="py-3">Store</th><th>ROs</th><th>Hours</th><th>Total Labor</th><th>Total Parts</th><th>Gross</th><th>ELR</th><th>Gross %</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {STORES.map((store) => {
+                      const t = totalsByStore[store];
+                      const gross = t.laborGross + t.partsGross;
+                      const sales = t.labor + t.parts;
+                      return (
+                        <tr key={store} className="border-b last:border-0">
+                          <td className="py-3 font-semibold">{store}</td>
+                          <td>{number(t.ros)}</td>
+                          <td>{number(t.hours)}</td>
+                          <td>{money(t.labor)}</td>
+                          <td>{money(t.parts)}</td>
+                          <td>{money(gross)}</td>
+                          <td>{money(t.hours ? t.labor / t.hours : 0)}</td>
+                          <td>{pct(sales ? (gross / sales) * 100 : 0)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
-function SummaryLine({ label, value }) {
+function Bubble({ label, value, large }) {
   return (
-    <div className="border-t first:border-t-0 first:pt-0 pt-5">
-      <p className="text-sm font-bold uppercase text-slate-500">{label}</p>
-      <p className="mt-2 text-4xl font-extrabold">{value}</p>
+    <div className={`rounded-full border bg-slate-50 shadow-sm flex flex-col items-center justify-center text-center p-5 ${large ? "min-h-44" : "min-h-32"}`}>
+      <div className="text-xs uppercase tracking-wide text-slate-500 font-bold">{label}</div>
+      <div className={`${large ? "text-3xl" : "text-2xl"} font-black mt-2`}>{value}</div>
     </div>
   );
 }
 
-function StoreBox({ label, value, badge, sub }) {
+function Stat({ label, value, wide }) {
   return (
-    <div className="rounded-xl bg-white p-3 shadow-sm">
-      <p className="text-slate-500">{label}</p>
-      <p className="mt-1 font-bold">{value}{badge}</p>
-      {sub && <p className="text-xs text-slate-500">{sub}</p>}
+    <div className={`rounded-2xl border bg-slate-50 p-3 ${wide ? "col-span-2" : ""}`}>
+      <div className="text-xs text-slate-500 font-bold uppercase">{label}</div>
+      <div className="text-lg font-black mt-1">{value}</div>
     </div>
   );
 }
