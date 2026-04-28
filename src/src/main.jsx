@@ -1,10 +1,6 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
-import FixedOpsTracker from "./App.jsx";
+import App from "./App.jsx";
 import "./style.css";
 
-createRoot(document.getElementById("root")).render(
-  <React.StrictMode>
-    <FixedOpsTracker />
-  </React.StrictMode>
-);
+createRoot(document.getElementById("root")).render(<App />);
