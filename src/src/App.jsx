@@ -11,6 +11,23 @@ const logins = {
   friendly: { name: "Friendly Ford Login", username: "friendly", password: "friendly123", role: "dealer", store: "Friendly Ford" },
 };
 
+const defaultPasswords = Object.fromEntries(
+  Object.entries(logins).map(([key, account]) => [key, account.password])
+);
+
+const loadSavedPasswords = () => {
+  try {
+    const saved = localStorage.getItem("fixedOpsPasswords");
+    return saved ? { ...defaultPasswords, ...JSON.parse(saved) } : defaultPasswords;
+  } catch {
+    return defaultPasswords;
+  }
+};
+
+const savePasswords = (passwords) => {
+  localStorage.setItem("fixedOpsPasswords", JSON.stringify(passwords));
+};
+
 const today = () => new Date().toISOString().slice(0, 10);
 const dateKey = (date) => date.toISOString().slice(0, 10);
 const toNum = (value) => Number(String(value || "").replace(/[$,]/g, "")) || 0;
@@ -122,21 +139,10 @@ const totalsOf = (rows) => {
 const seedData = () => {
   const seed = {};
   const dates = monthDates(today());
-  const currentDay = new Date().getDate();
 
-  stores.forEach((store, storeIndex) => {
-    dates.forEach((date, index) => {
-      const base = storeIndex + 1;
-      const hasData = index < currentDay;
-      seed[`${store}-${date}`] = {
-        ...blank(store, date),
-        repairOrders: hasData ? String(28 + base * 3 + (index % 6) * 2) : "",
-        hours: hasData ? String(72 + base * 8 + (index % 6) * 5) : "",
-        labor: hasData ? String(11200 + base * 1400 + (index % 6) * 850) : "",
-        parts: hasData ? String(7900 + base * 1000 + (index % 6) * 600) : "",
-        laborGross: hasData ? String(6800 + base * 800 + (index % 6) * 500) : "",
-        partsGross: hasData ? String(4200 + base * 550 + (index % 6) * 350) : "",
-      };
+  stores.forEach((store) => {
+    dates.forEach((date) => {
+      seed[`${store}-${date}`] = blank(store, date);
     });
   });
 
@@ -202,6 +208,13 @@ export default function FixedOpsTracker() {
   const [loginPassword, setLoginPassword] = useState("");
   const [loginError, setLoginError] = useState("");
   const [activeLoginKey, setActiveLoginKey] = useState(null);
+  const [savedPasswords, setSavedPasswords] = useState(loadSavedPasswords);
+  const [showPasswordPanel, setShowPasswordPanel] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordMessage, setPasswordMessage] = useState("");
+  const [entryError, setEntryError] = useState("");
   const [selectedStore, setSelectedStore] = useState(stores[0]);
   const [date, setDate] = useState(priorBusinessDay());
   const [entries, setEntries] = useState(seedData);
@@ -246,18 +259,36 @@ export default function FixedOpsTracker() {
   const groupLaborGrossPct = group.labor > 0 ? (group.laborGross / group.labor) * 100 : 0;
   const groupPartsGrossPct = group.parts > 0 ? (group.partsGross / group.parts) * 100 : 0;
 
-  const update = (field, value) =>
+  const update = (field, value) => {
+    const nextEntry = { ...(entries[key] || blank(store, date)), [field]: value };
+    const labor = toNum(nextEntry.labor);
+    const laborGross = toNum(nextEntry.laborGross);
+    const parts = toNum(nextEntry.parts);
+    const partsGross = toNum(nextEntry.partsGross);
+
+    if (laborGross > labor && labor > 0) {
+      setEntryError("Labor Gross cannot be higher than Total Labor.");
+      return;
+    }
+
+    if (partsGross > parts && parts > 0) {
+      setEntryError("Parts Gross cannot be higher than Total Parts.");
+      return;
+    }
+
+    setEntryError("");
     setEntries((prev) => ({
       ...prev,
-      [key]: { ...(prev[key] || blank(store, date)), [field]: value },
+      [key]: nextEntry,
     }));
+  };
 
   const handleLogin = (event) => {
     event.preventDefault();
     const found = Object.entries(logins).find(
-      ([, account]) =>
+      ([loginKey, account]) =>
         account.username.toLowerCase() === loginUsername.trim().toLowerCase() &&
-        account.password === loginPassword
+        savedPasswords[loginKey] === loginPassword
     );
 
     if (!found) {
@@ -276,6 +307,39 @@ export default function FixedOpsTracker() {
     setLoginUsername("");
     setLoginPassword("");
     setLoginError("");
+    setShowPasswordPanel(false);
+    setCurrentPassword("");
+    setNewPassword("");
+    setConfirmPassword("");
+    setPasswordMessage("");
+  };
+
+  const changePassword = (event) => {
+    event.preventDefault();
+    setPasswordMessage("");
+
+    if (savedPasswords[activeLoginKey] !== currentPassword) {
+      setPasswordMessage("Current password is incorrect.");
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      setPasswordMessage("New password must be at least 6 characters.");
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setPasswordMessage("New passwords do not match.");
+      return;
+    }
+
+    const updatedPasswords = { ...savedPasswords, [activeLoginKey]: newPassword };
+    setSavedPasswords(updatedPasswords);
+    savePasswords(updatedPasswords);
+    setCurrentPassword("");
+    setNewPassword("");
+    setConfirmPassword("");
+    setPasswordMessage("Password updated for this login.");
   };
 
   if (!activeLogin) {
@@ -345,9 +409,20 @@ export default function FixedOpsTracker() {
               <p className="text-xs font-bold uppercase tracking-wide text-slate-600">Current Month</p>
               <p className="mt-1 text-3xl font-extrabold text-slate-950">{fmtMonth(date)}</p>
             </div>
-            <button className="h-11 rounded-xl border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50" onClick={logout}>
-              Logout
-            </button>
+            <div className="flex gap-2">
+              <button
+                className="h-11 rounded-xl border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50"
+                onClick={() => {
+                  setShowPasswordPanel((value) => !value);
+                  setPasswordMessage("");
+                }}
+              >
+                Change Password
+              </button>
+              <button className="h-11 rounded-xl border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50" onClick={logout}>
+                Logout
+              </button>
+            </div>
           </div>
         </div>
 
@@ -376,6 +451,60 @@ export default function FixedOpsTracker() {
           </div>
         </Card>
 
+        {showPasswordPanel && (
+          <Card className="mb-6 p-5">
+            <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+              <div>
+                <h2 className="text-xl font-bold">Change Password</h2>
+                <p className="text-sm text-slate-500">Update the password for {activeLogin.name}.</p>
+              </div>
+              <p className="rounded-xl bg-yellow-100 px-4 py-3 text-sm font-bold text-slate-700">
+                Prototype password storage is browser-based.
+              </p>
+            </div>
+
+            <form onSubmit={changePassword} className="mt-5 grid gap-4 md:grid-cols-4">
+              <div>
+                <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-500">Current Password</label>
+                <input
+                  className="h-12 w-full rounded-xl border border-slate-300 bg-white px-3 text-lg outline-none focus:border-slate-900"
+                  type="password"
+                  value={currentPassword}
+                  onChange={(event) => setCurrentPassword(event.target.value)}
+                />
+              </div>
+              <div>
+                <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-500">New Password</label>
+                <input
+                  className="h-12 w-full rounded-xl border border-slate-300 bg-white px-3 text-lg outline-none focus:border-slate-900"
+                  type="password"
+                  value={newPassword}
+                  onChange={(event) => setNewPassword(event.target.value)}
+                />
+              </div>
+              <div>
+                <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-500">Confirm New Password</label>
+                <input
+                  className="h-12 w-full rounded-xl border border-slate-300 bg-white px-3 text-lg outline-none focus:border-slate-900"
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(event) => setConfirmPassword(event.target.value)}
+                />
+              </div>
+              <div className="flex items-end">
+                <button className="h-12 w-full rounded-xl bg-slate-900 text-sm font-extrabold uppercase tracking-wide text-white shadow-sm" type="submit">
+                  Save Password
+                </button>
+              </div>
+            </form>
+            {passwordMessage && (
+              <p className={`mt-4 rounded-xl px-4 py-3 text-sm font-bold ${passwordMessage.includes("updated") ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
+                {passwordMessage}
+              </p>
+            )}
+          </Card>
+        )}
+
         <div className="mb-6 grid gap-3 rounded-3xl border border-slate-200 bg-white p-3 shadow-sm md:grid-cols-4">
           {[
             ["daily", "DAILY ENTRY"],
@@ -398,7 +527,7 @@ export default function FixedOpsTracker() {
         </div>
 
         {tab === "daily" && (
-          <DailyTab current={current} date={date} setDate={setDate} update={update} daily={daily} canEditStore={canEditStore} activeLogin={activeLogin} store={store} />
+          <DailyTab current={current} date={date} setDate={setDate} update={update} daily={daily} canEditStore={canEditStore} activeLogin={activeLogin} store={store} entryError={entryError} />
         )}
 
         {tab === "weekly" && (
@@ -431,7 +560,7 @@ export default function FixedOpsTracker() {
   );
 }
 
-function DailyTab({ current, date, setDate, update, daily, canEditStore, activeLogin, store }) {
+function DailyTab({ current, date, setDate, update, daily, canEditStore, activeLogin, store, entryError }) {
   return (
     <div className="space-y-6">
       <Card className="p-5">
@@ -442,6 +571,11 @@ function DailyTab({ current, date, setDate, update, daily, canEditStore, activeL
             {!canEditStore && (
               <p className="mt-2 rounded-xl bg-slate-100 px-4 py-3 text-sm font-bold text-slate-600">
                 Read only: {activeLogin.name} can view {store}, but can only edit {activeLogin.store}.
+              </p>
+            )}
+            {entryError && (
+              <p className="mt-2 rounded-xl bg-red-100 px-4 py-3 text-sm font-bold text-red-700">
+                {entryError}
               </p>
             )}
           </div>
