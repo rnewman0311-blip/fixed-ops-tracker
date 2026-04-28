@@ -1,11 +1,11 @@
 import React, { useMemo, useState } from "react";
 
-const stores = ["Honda of Pasadena", "CDJR Seattle", "El Cajon Ford", "Brandon Ford", "Friendly Ford"];
+const stores = ["Honda of Pasadena", "CDJR Hyundai Seattle", "El Cajon Ford", "Brandon Ford", "Friendly Ford"];
 
 const logins = {
   director: { name: "Richard / Director", username: "richard", password: "director123", role: "director", store: "All Stores" },
   pasadena: { name: "Honda of Pasadena Login", username: "pasadena", password: "pasadena123", role: "dealer", store: "Honda of Pasadena" },
-  seattle: { name: "CDJR Seattle Login", username: "seattle", password: "seattle123", role: "dealer", store: "CDJR Seattle" },
+  seattle: { name: "CDJR Hyundai Seattle Login", username: "seattle", password: "seattle123", role: "dealer", store: "CDJR Hyundai Seattle" },
   elcajon: { name: "El Cajon Ford Login", username: "elcajon", password: "elcajon123", role: "dealer", store: "El Cajon Ford" },
   brandon: { name: "Brandon Ford Login", username: "brandon", password: "brandon123", role: "dealer", store: "Brandon Ford" },
   friendly: { name: "Friendly Ford Login", username: "friendly", password: "friendly123", role: "dealer", store: "Friendly Ford" },
