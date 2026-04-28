@@ -9,8 +9,7 @@
     "vite": "latest",
     "react": "latest",
     "react-dom": "latest",
-    "@supabase/supabase-js": "latest",
-    "lucide-react": "latest"
+    "@supabase/supabase-js": "latest"
   },
   "devDependencies": {}
 }
