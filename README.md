@@ -1,20 +1,20 @@
-# Fixed Ops Tracker — Corrected Supabase Cloud Save Version
+# Fixed Ops Tracker — Final Clean Supabase Version
 
-This corrected version keeps the clean Fixed Ops Tracker layout and saves daily entries in Supabase.
+This version uses a clean Vite/React file structure and saves dealer entries to Supabase.
 
-## Files
+## Required Vercel Environment Variables
 
-- `index.html` — must stay as the website shell.
-- `src/main.jsx` — loads React and CSS.
-- `src/App.jsx` — app logic and Supabase saving.
-- `src/style.css` — styling only.
-- `supabase-setup.sql` — database setup.
+- VITE_SUPABASE_URL
+- VITE_SUPABASE_ANON_KEY
 
-## Vercel Environment Variables
+## Correct file structure
 
-Add these in Vercel:
-
-- `VITE_SUPABASE_URL`
-- `VITE_SUPABASE_ANON_KEY`
-
-Then redeploy.
+fixed-ops-tracker/
+├─ index.html
+├─ package.json
+├─ README.md
+├─ supabase-setup.sql
+└─ src/
+   ├─ App.jsx
+   ├─ main.jsx
+   └─ style.css
