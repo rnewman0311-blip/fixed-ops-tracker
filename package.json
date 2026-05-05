@@ -1,8 +1,4 @@
 {
-  "name": "fixed-ops-tracker",
-  "private": true,
-  "version": "1.0.0",
-  "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -13,11 +9,9 @@
     "vite": "latest",
     "react": "latest",
     "react-dom": "latest",
-    "@supabase/supabase-js": "latest"
-  },
-  "devDependencies": {
-    "tailwindcss": "3.4.17",
+    "tailwindcss": "latest",
     "postcss": "latest",
     "autoprefixer": "latest"
-  }
+  },
+  "devDependencies": {}
 }

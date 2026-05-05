@@ -1,26 +1,35 @@
-# Fixed Ops Tracker — Original Format with Supabase Cloud Save
+# Fixed Ops Tracker
 
-This version keeps the original polished tracker layout and adds Supabase cloud saving.
+Dealer Operating Control Service — Fixed Ops Daily Tracker.
 
-## Required Vercel Environment Variables
+## GitHub / Vercel setup
 
-- `VITE_SUPABASE_URL`
-- `VITE_SUPABASE_ANON_KEY`
+Upload these files to your GitHub repository:
 
-## Correct GitHub Structure
+- `index.html`
+- `package.json`
+- `tailwind.config.js`
+- `postcss.config.js`
+- `src/App.jsx`
+- `src/main.jsx`
+- `src/style.css`
 
-```
-fixed-ops-tracker/
-├─ index.html
-├─ package.json
-├─ README.md
-├─ postcss.config.js
-├─ tailwind.config.js
-├─ supabase-setup.sql
-└─ src/
-   ├─ App.jsx
-   ├─ main.jsx
-   └─ style.css
-```
+Vercel should use:
 
-Do not place `App.jsx` or `style.css` at the root level.
+- Framework Preset: Vite
+- Build Command: `npm run build`
+- Output Directory: `dist`
+
+## Demo logins
+
+- Director: `richard` / `director123`
+- Honda of Pasadena: `pasadena` / `pasadena123`
+- CDJR Hyundai Seattle: `seattle` / `seattle123`
+- El Cajon Ford: `elcajon` / `elcajon123`
+- Brandon Ford: `brandon` / `brandon123`
+- Friendly Ford: `friendly` / `friendly123`
+
+## Notes
+
+This prototype saves entries and changed passwords to browser localStorage.
+For permanent multi-user storage across different computers, the app will need a backend database.
