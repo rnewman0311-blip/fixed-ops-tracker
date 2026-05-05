@@ -70,7 +70,7 @@ const timing = (dateString) => {
   const selected = new Date(`${dateString}T12:00:00`);
   const dates = monthDates(dateString);
   const open = dates.filter((d) => !dayStatus(d).closed);
-  const passed = open.filter((d) => new Date(`${d}T12:00:00`) < selected);
+  const passed = open.filter((d) => new Date(`${d}T12:00:00`) <= selected);
   return { passed: passed.length, total: open.length, closed: dates.length - open.length };
 };
 const fmtDate = (dateString) =>
