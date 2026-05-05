@@ -285,10 +285,106 @@ function TrackingTab({ selected, forecast, forecastTotalSale, group, monthPercen
   return <div className="space-y-6"><div className="grid gap-4 md:grid-cols-5"><Stat title="MTD Total ROs" value={qty(selected.repairOrders)} /><Stat title="MTD Total Hours" value={qty(selected.hours, 1)} /><Stat title="MTD Total Labor" value={money(selected.labor)} /><Stat title="MTD Total Parts" value={money(selected.parts)} /><Stat title="MTD Gross" value={money(selected.totalGross)} /></div><Card className="p-6"><div className="mb-5"><h2 className="text-2xl font-bold">MTD & Tracking — {store}</h2><p className="text-sm text-slate-500">{fmtMonth(date)} · {qty(monthPercent, 1)}% of working month complete</p></div><div className="grid gap-4 md:grid-cols-2"><Stat title="Labor Tracking" value={money(forecast.labor)} /><Stat title="Parts Tracking" value={money(forecast.parts)} /></div><div className="mt-6 grid gap-4 md:grid-cols-2"><div className="w-full rounded-2xl bg-yellow-100 px-6 py-5 text-center ring-2 ring-yellow-400"><p className="text-xs font-bold uppercase text-slate-600">Month End Tracking Parts and Labor</p><p className="mt-1 text-4xl font-extrabold">{money(forecastTotalSale)}</p></div><div className="w-full rounded-2xl bg-yellow-100 px-6 py-5 text-center ring-2 ring-yellow-400"><p className="text-xs font-bold uppercase text-slate-600">Month End Parts and Labor Tracking Gross</p><p className="mt-1 text-4xl font-extrabold">{money(forecast.totalGross)}</p></div></div><div className="mt-4 flex flex-col items-center gap-3"><button onClick={saveMonthlyTotal} className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-extrabold uppercase tracking-wide text-white shadow-sm">Save Month Totals</button>{savedMonth && <p className="text-center text-xs font-bold text-green-700">Last saved: {new Date(savedMonth.saved_at).toLocaleString()}</p>}</div></Card></div>;
 }
 
-function OverviewTab({ stores, activeLogin, visibleRows, group, monthPercent }) {
-  const overviewStores = activeLogin?.role === "dealer" ? [...stores.filter((s) => s !== activeLogin.store), activeLogin.store] : stores;
-  return <div className="space-y-6"><div className="grid gap-4 md:grid-cols-4"><Stat title="Group Repair Orders" value={qty(group.repairOrders)} /><Stat title="Group ELR" value={money(group.elr)} /><Stat title="Group Avg Gross Per RO" value={money(group.grossPerRo)} /><Stat title="Group Avg Parts/Labor" value={qty(group.partsToLabor, 2)} /></div><Card className="p-5"><h2 className="mb-4 text-xl font-bold">GROUP OVERVIEW — Store Running Totals</h2><div className="overflow-x-auto"><div className="flex gap-4 pb-2">{overviewStores.map((s) => { const st = totalsOf(visibleRows.filter((r) => r.store === s)); return <Card key={s} className="min-w-[260px] bg-slate-50 p-5 shadow-none"><div className="mb-4 flex items-center justify-between gap-3"><h3 className="text-lg font-bold">{s}</h3><span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 shadow-sm">{qty(monthPercent, 1)}% month</span></div><div className="space-y-3 text-sm"><StoreBox label="MTD ROs" value={qty(st.repairOrders)} /><StoreBox label="Hours" value={qty(st.hours, 1)} /><StoreBox label="Labor Sales" value={money(st.labor)} /><StoreBox label="Parts Sales" value={money(st.parts)} /><StoreBox label="Labor Gross" value={money(st.laborGross)} /><StoreBox label="Parts Gross" value={money(st.partsGross)} /><StoreBox label="ELR" value={money(st.elr)} badge={<Badge value={st.elr} benchmark={group.elr} />} /><StoreBox label="Gross Per RO" value={money(st.grossPerRo)} badge={<Badge value={st.grossPerRo} benchmark={group.grossPerRo} />} /><StoreBox label="Parts/Labor" value={qty(st.partsToLabor, 2)} badge={<Badge value={st.partsToLabor} benchmark={group.partsToLabor} />} /></div><Progress percent={monthPercent} /></Card>; })}</div></div></Card></div>;
+function DocsAverageCard({ docsAverage, monthPercent }) {
+  return (
+    <Card className="min-w-[270px] w-[270px] bg-yellow-50 p-4 shadow-none ring-2 ring-yellow-400 flex flex-col justify-between">
+      <div className="mb-4 flex items-start justify-between gap-3 min-h-[56px]">
+        <h3 className="text-base font-extrabold leading-tight">DOCS</h3>
+        <span className="rounded-full bg-white px-3 py-1 text-[10px] font-semibold text-slate-600 leading-tight text-center min-w-[58px] shadow-sm">Group Avg</span>
+      </div>
+      <div className="space-y-3 text-sm">
+        <StoreBox label="Avg ROs" value={qty(docsAverage.repairOrders)} />
+        <StoreBox label="Avg Hours" value={qty(docsAverage.hours, 1)} />
+        <StoreBox label="Avg Labor Sales" value={money(docsAverage.labor)} />
+        <StoreBox label="Avg Parts Sales" value={money(docsAverage.parts)} />
+        <StoreBox label="Avg Labor Gross" value={money(docsAverage.laborGross)} />
+        <StoreBox label="Avg Parts Gross" value={money(docsAverage.partsGross)} />
+        <StoreBox label="Group ELR" value={money(docsAverage.elr)} />
+        <StoreBox label="Group Gross Per RO" value={money(docsAverage.grossPerRo)} />
+        <StoreBox label="Group Parts/Labor" value={qty(docsAverage.partsToLabor, 2)} />
+      </div>
+      <Progress percent={monthPercent} />
+    </Card>
+  );
 }
-function StoreBox({ label, value, sub, badge }) {
-  return <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm"><div className="flex items-center justify-between gap-2"><span className="text-xs font-bold uppercase tracking-wide text-slate-500">{label}</span>{badge}</div><div className="mt-1 text-xl font-extrabold text-slate-950">{value}</div>{sub && <div className="mt-1 text-xs font-semibold text-slate-500">{sub}</div>}</div>;
+
+function OverviewTab({ stores, activeLogin, visibleRows, group, monthPercent }) {
+  const overviewStores = activeLogin && activeLogin.role === "dealer"
+    ? [...stores.filter((s) => s !== activeLogin.store), activeLogin.store]
+    : stores;
+
+  const storeCount = Math.max(stores.length, 1);
+  const docsAverage = {
+    repairOrders: group.repairOrders / storeCount,
+    hours: group.hours / storeCount,
+    labor: group.labor / storeCount,
+    parts: group.parts / storeCount,
+    laborGross: group.laborGross / storeCount,
+    partsGross: group.partsGross / storeCount,
+    elr: group.elr,
+    grossPerRo: group.grossPerRo,
+    partsToLabor: group.partsToLabor,
+  };
+
+  const isDealer = activeLogin && activeLogin.role === "dealer";
+
+  return (
+    <div className="space-y-6">
+      <div className="grid gap-4 md:grid-cols-4">
+        <Stat title="Group Repair Orders" value={qty(group.repairOrders)} />
+        <Stat title="Group ELR" value={money(group.elr)} />
+        <Stat title="Group Avg Gross Per RO" value={money(group.grossPerRo)} />
+        <Stat title="Group Avg Parts/Labor" value={qty(group.partsToLabor, 2)} />
+      </div>
+
+      <Card className="p-5">
+        <h2 className="mb-4 text-xl font-bold">GROUP OVERVIEW — Store Running Totals</h2>
+        <div className="overflow-x-auto">
+          <div className="flex gap-4 pb-2 items-stretch">
+            {!isDealer && <DocsAverageCard docsAverage={docsAverage} monthPercent={monthPercent} />}
+
+            {overviewStores.map((storeName) => {
+              const st = totalsOf(visibleRows.filter((r) => r.store === storeName));
+              return (
+                <Card key={storeName} className="min-w-[270px] w-[270px] bg-slate-50 p-4 shadow-none flex flex-col justify-between">
+                  <div className="mb-4 flex items-start justify-between gap-3 min-h-[56px]">
+                    <h3 className="text-base font-extrabold leading-tight">{storeName}</h3>
+                    <span className="rounded-full bg-white px-3 py-1 text-[10px] font-semibold text-slate-600 leading-tight text-center min-w-[58px] shadow-sm">{qty(monthPercent, 1)}% month</span>
+                  </div>
+                  <div className="space-y-3 text-sm">
+                    <StoreBox label="MTD ROs" value={qty(st.repairOrders)} badge={<Badge value={st.repairOrders} benchmark={docsAverage.repairOrders} />} />
+                    <StoreBox label="Hours" value={qty(st.hours, 1)} badge={<Badge value={st.hours} benchmark={docsAverage.hours} />} />
+                    <StoreBox label="Labor Sales" value={money(st.labor)} badge={<Badge value={st.labor} benchmark={docsAverage.labor} />} />
+                    <StoreBox label="Parts Sales" value={money(st.parts)} badge={<Badge value={st.parts} benchmark={docsAverage.parts} />} />
+                    <StoreBox label="Labor Gross" value={money(st.laborGross)} badge={<Badge value={st.laborGross} benchmark={docsAverage.laborGross} />} />
+                    <StoreBox label="Parts Gross" value={money(st.partsGross)} badge={<Badge value={st.partsGross} benchmark={docsAverage.partsGross} />} />
+                    <StoreBox label="ELR" value={money(st.elr)} badge={<Badge value={st.elr} benchmark={docsAverage.elr} />} />
+                    <StoreBox label="Gross Per RO" value={money(st.grossPerRo)} badge={<Badge value={st.grossPerRo} benchmark={docsAverage.grossPerRo} />} />
+                    <StoreBox label="Parts/Labor" value={qty(st.partsToLabor, 2)} badge={<Badge value={st.partsToLabor} benchmark={docsAverage.partsToLabor} />} />
+                  </div>
+                  <Progress percent={monthPercent} />
+                </Card>
+              );
+            })}
+
+            {isDealer && <DocsAverageCard docsAverage={docsAverage} monthPercent={monthPercent} />}
+          </div>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function StoreBox({ label, value, badge }) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2 min-h-[86px] flex flex-col justify-between shadow-sm">
+      <div className="flex items-start justify-between gap-2 min-h-[28px]">
+        <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500 leading-tight">{label}</div>
+        {badge && <div className="shrink-0">{badge}</div>}
+      </div>
+      <div className="min-h-[30px] flex items-end">
+        <div className="text-[22px] font-black leading-none tabular-nums text-slate-900">{value}</div>
+      </div>
+    </div>
+  );
 }
