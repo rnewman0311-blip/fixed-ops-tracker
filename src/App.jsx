@@ -12,13 +12,11 @@ const cleanEnvValue = (value) => {
     .replace(/^NEXT_PUBLIC_SUPABASE_URL=/, "")
     .replace(/^NEXT_PUBLIC_SUPABASE_ANON_KEY=/, "")
     .replace(/^NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=/, "")
-    .replace(/^['\"]|['\"]$/g, "")
+    .replace(/^[']|[']$/g, "")
+    .replace(/^[\"]|[\"]$/g, "")
     .trim();
 
-  return cleaned
-    .split("")
-    .filter((ch) => ch !== " " && ch !== "\n" && ch !== "\r" && ch !== "\t")
-    .join("");
+  return cleaned.replace(/\s/g, "");
 };
 
 const supabaseUrl = cleanEnvValue(viteEnv.VITE_SUPABASE_URL);
@@ -136,7 +134,7 @@ export default function FixedOpsTracker() {
   const [loginUsername, setLoginUsername] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [loginError, setLoginError] = useState("");
-  const [activeLoginKey, setActiveLoginKey] = useState(null);
+  const [activeLoginKey, setActiveLoginKey] = useState(() => localStorage.getItem("fixedOpsActiveLoginKey") || null);
   const [selectedStore, setSelectedStore] = useState(stores[0]);
   const [date, setDate] = useState(priorBusinessDay());
   const [entries, setEntries] = useState(() => {
@@ -249,6 +247,7 @@ export default function FixedOpsTracker() {
     if (!found) return setLoginError("Invalid username or password");
     const [loginKey, account] = found;
     setActiveLoginKey(loginKey);
+    localStorage.setItem("fixedOpsActiveLoginKey", loginKey);
     setLoginError("");
     if (account.role === "dealer") setSelectedStore(account.store);
   }
@@ -270,19 +269,153 @@ export default function FixedOpsTracker() {
     return <div className="flex min-h-screen items-center justify-center bg-slate-50 p-4 text-slate-950"><Card className="w-full max-w-md p-8"><div className="text-center"><img src="/docs-logo.png" alt="DOCS Dealership Group" className="mx-auto h-auto w-full max-w-[260px] object-contain" /><p className="mt-4 text-sm text-slate-500">Fixed Ops Daily Tracker login</p></div><form onSubmit={handleLogin} className="mt-8 space-y-4"><div><label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-500">Username</label><input className="h-12 w-full rounded-xl border border-slate-300 bg-white px-3 text-lg outline-none focus:border-slate-900" value={loginUsername} onChange={(e) => setLoginUsername(e.target.value)} placeholder="Honda of Pasadena" /></div><div><label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-500">Password</label><input className="h-12 w-full rounded-xl border border-slate-300 bg-white px-3 text-lg outline-none focus:border-slate-900" type="password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} placeholder="Enter password" /></div>{loginError && <p className="rounded-xl bg-red-100 px-4 py-3 text-sm font-bold text-red-700">{loginError}</p>}<button className="h-12 w-full rounded-xl bg-slate-900 text-sm font-extrabold uppercase tracking-wide text-white shadow-sm" type="submit">Login</button></form></Card></div>;
   }
 
-  return <div className="min-h-screen bg-slate-50 p-4 text-slate-950 md:p-8"><div className="mx-auto max-w-7xl"><div className="mb-6 flex justify-center"><img src="/docs-logo.png" alt="DOCS Dealership Group" className="h-auto w-full max-w-[360px] object-contain" /></div><div className="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between"><div><h1 className="text-3xl font-bold">Fixed Ops Daily Tracker</h1><p className="text-sm text-slate-500">Daily entry, monthly summary, MTD tracking, and director overview.</p><p className="mt-2 text-sm font-bold text-slate-700">Logged in as: {activeLogin.name}</p></div><div className="flex flex-col items-start gap-3 md:items-end"><div className="rounded-2xl border-2 border-yellow-400 bg-yellow-100 px-6 py-4 text-center shadow-sm"><p className="text-xs font-bold uppercase tracking-wide text-slate-600">Current Month</p><p className="mt-1 text-3xl font-extrabold text-slate-950">{fmtMonth(date)}</p></div><div className="flex gap-2"><button className="h-11 rounded-xl border border-slate-300 bg-white px-4 text-sm font-bold" onClick={() => setShowPasswordBox(!showPasswordBox)}>Change Password</button><button className="h-11 rounded-xl border border-slate-300 bg-white px-4 text-sm font-bold" onClick={() => setActiveLoginKey(null)}>Logout</button></div></div></div>{showPasswordBox && <Card className="mb-6 p-5"><div className="flex flex-col gap-3 md:flex-row md:items-end"><div className="flex-1"><label className="mb-2 block text-xs font-bold uppercase text-slate-500">New Password</label><input className="h-11 w-full rounded-xl border border-slate-300 px-3" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} /></div><button className="h-11 rounded-xl bg-slate-900 px-5 text-sm font-extrabold uppercase tracking-wide text-white" onClick={changePassword}>Save Password</button></div></Card>}{entryError && <p className="mb-6 rounded-xl bg-red-100 px-4 py-3 text-sm font-bold text-red-700">{entryError}</p>}<p className={`mb-6 rounded-xl px-4 py-3 text-sm font-bold ${dataStatus.toLowerCase().includes("failed") || dataStatus.toLowerCase().includes("issue") ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>{isLoading ? "Loading... " : ""}{dataStatus}</p><Card className="mb-6 p-5"><div className="grid gap-4 md:grid-cols-4"><div className="md:col-span-2"><label className="mb-2 block text-xs font-bold uppercase text-slate-500">Dealership</label><select className="h-11 w-full rounded-xl border border-slate-300 bg-white px-3" value={store} onChange={(e) => setSelectedStore(e.target.value)}>{stores.map((s) => <option key={s}>{s}</option>)}</select></div><Stat title="Working Days Passed" value={qty(t.passed)} /><Stat title="Working Days In Month" value={qty(t.total)} /></div><div className="mt-5"><div className="flex justify-between text-sm"><p className="font-semibold">Working Month Progress</p><p>{qty(monthPercent, 1)}% complete · {qty(t.closed)} closed days excluded</p></div><Progress percent={monthPercent} /></div></Card><div className="mb-6 grid gap-3 rounded-3xl border border-slate-200 bg-white p-3 shadow-sm md:grid-cols-4">{[["daily", "DAILY ENTRY"], ["monthly", "MONTHLY SUMMARY"], ["tracking", "MTD & TRACKING"], ["overview", "GROUP OVERVIEW"]].map(([k, label]) => <button key={k} onClick={() => setTab(k)} className={`rounded-2xl border-2 px-4 py-3 text-sm font-extrabold uppercase tracking-wide ${tab === k ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-slate-50 text-slate-700"}`}>{label}</button>)}</div>{tab === "daily" && <DailyTab current={current} date={date} setDate={setDate} update={update} saveDailyEntry={saveDailyEntry} daily={daily} canEditStore={canEditStore} activeLogin={activeLogin} store={store} />}{tab === "monthly" && <MonthlyTab monthRows={monthRows} monthly={monthly} selected={selected} forecast={forecast} multiplier={multiplier} group={group} store={store} date={date} savedMonth={savedMonth} saveMonthlyTotal={saveMonthlyTotal} />}{tab === "tracking" && <TrackingTab selected={selected} forecast={forecast} forecastTotalSale={forecastTotalSale} group={group} monthPercent={monthPercent} store={store} date={date} savedMonth={savedMonth} saveMonthlyTotal={saveMonthlyTotal} />}{tab === "overview" && <OverviewTab stores={stores} activeLogin={activeLogin} visibleRows={visibleRows} group={group} monthPercent={monthPercent} />}</div></div>;
+  return <div className="min-h-screen bg-slate-50 p-4 text-slate-950 md:p-8"><div className="mx-auto max-w-7xl"><div className="mb-6 flex justify-center"><img src="/docs-logo.png" alt="DOCS Dealership Group" className="h-auto w-full max-w-[360px] object-contain" /></div><div className="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between"><div><h1 className="text-3xl font-bold">Fixed Ops Daily Tracker</h1><p className="text-sm text-slate-500">Daily entry, monthly summary, MTD tracking, and director overview.</p><p className="mt-2 text-sm font-bold text-slate-700">Logged in as: {activeLogin.name}</p></div><div className="flex flex-col items-start gap-3 md:items-end"><div className="rounded-2xl border-2 border-yellow-400 bg-yellow-100 px-6 py-4 text-center shadow-sm"><p className="text-xs font-bold uppercase tracking-wide text-slate-600">Current Month</p><p className="mt-1 text-3xl font-extrabold text-slate-950">{fmtMonth(date)}</p></div><div className="flex gap-2"><button className="h-11 rounded-xl border border-slate-300 bg-white px-4 text-sm font-bold" onClick={() => setShowPasswordBox(!showPasswordBox)}>Change Password</button><button className="h-11 rounded-xl border border-slate-300 bg-white px-4 text-sm font-bold" onClick={() => { localStorage.removeItem("fixedOpsActiveLoginKey"); setActiveLoginKey(null); }}>Logout</button></div></div></div>{showPasswordBox && <Card className="mb-6 p-5"><div className="flex flex-col gap-3 md:flex-row md:items-end"><div className="flex-1"><label className="mb-2 block text-xs font-bold uppercase text-slate-500">New Password</label><input className="h-11 w-full rounded-xl border border-slate-300 px-3" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} /></div><button className="h-11 rounded-xl bg-slate-900 px-5 text-sm font-extrabold uppercase tracking-wide text-white" onClick={changePassword}>Save Password</button></div></Card>}{entryError && <p className="mb-6 rounded-xl bg-red-100 px-4 py-3 text-sm font-bold text-red-700">{entryError}</p>}<p className={`mb-6 rounded-xl px-4 py-3 text-sm font-bold ${dataStatus.toLowerCase().includes("failed") || dataStatus.toLowerCase().includes("issue") ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>{isLoading ? "Loading... " : ""}{dataStatus}</p><Card className="mb-6 p-5"><div className="grid gap-4 md:grid-cols-4"><div className="md:col-span-2"><label className="mb-2 block text-xs font-bold uppercase text-slate-500">Dealership</label><select className="h-11 w-full rounded-xl border border-slate-300 bg-white px-3" value={store} onChange={(e) => setSelectedStore(e.target.value)}>{stores.map((s) => <option key={s}>{s}</option>)}</select></div><Stat title="Working Days Passed" value={qty(t.passed)} /><Stat title="Working Days In Month" value={qty(t.total)} /></div><div className="mt-5"><div className="flex justify-between text-sm"><p className="font-semibold">Working Month Progress</p><p>{qty(monthPercent, 1)}% complete · {qty(t.closed)} closed days excluded</p></div><Progress percent={monthPercent} /></div></Card><div className="mb-6 rounded-2xl border-2 border-yellow-300 bg-yellow-100 px-6 py-4 text-center shadow-sm"><p className="text-xs font-bold uppercase tracking-wide text-slate-600">{tab === "overview" ? "Group Overview" : "Selected Dealership"}</p><p className="mt-1 text-3xl font-extrabold tracking-tight text-slate-950 md:text-4xl">{tab === "overview" ? "Group Average" : store}</p></div><div className="mx-auto mb-6 grid max-w-3xl gap-3 rounded-3xl border border-slate-200 bg-white p-3 shadow-sm md:grid-cols-2">{[["daily", "DAILY / MONTHLY"], ["overview", "GROUP OVERVIEW"]].map(([k, label]) => <button key={k} onClick={() => setTab(k)} className={`rounded-2xl border-2 px-4 py-3 text-sm font-extrabold uppercase tracking-wide ${tab === k ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-slate-50 text-slate-700"}`}>{label}</button>)}</div>{tab === "daily" && <div className="space-y-8"><DailyTab current={current} date={date} setDate={setDate} update={update} saveDailyEntry={saveDailyEntry} daily={daily} forecast={forecast} forecastTotalSale={forecastTotalSale} canEditStore={canEditStore} activeLogin={activeLogin} store={store} /><MonthlyTab monthRows={monthRows} monthly={monthly} selected={selected} forecast={forecast} multiplier={multiplier} group={group} store={store} date={date} savedMonth={savedMonth} saveMonthlyTotal={saveMonthlyTotal} /></div>}{tab === "overview" && <OverviewTab stores={stores} activeLogin={activeLogin} visibleRows={visibleRows} group={group} multiplier={multiplier} monthPercent={monthPercent} />}</div></div>;
 }
 
-function DailyTab({ current, date, setDate, update, saveDailyEntry, daily, canEditStore, activeLogin, store }) {
-  return <div className="space-y-6"><Card className="p-5"><div className="mb-6 flex flex-col gap-4 md:flex-row md:items-start md:justify-between"><div><h2 className="text-xl font-bold">Daily Entry</h2><p className="text-sm text-slate-500">Enter numbers for the prior open business day. Sundays and holidays are skipped automatically.</p>{!canEditStore && <p className="mt-2 rounded-xl bg-slate-100 px-4 py-3 text-sm font-bold text-slate-600">Read only: {activeLogin.name} can view {store}, but can only edit {activeLogin.store}.</p>}</div><div><label className="mb-2 block text-xs font-bold uppercase text-slate-500">Prior Business Day Entry Date</label><input className="h-11 rounded-xl border border-slate-300 px-3" type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div></div><div className="mb-5 flex justify-end"><button disabled={!canEditStore} onClick={saveDailyEntry} className={`rounded-xl px-6 py-3 text-sm font-extrabold uppercase tracking-wide shadow-sm ${canEditStore ? "bg-slate-900 text-white" : "bg-slate-200 text-slate-400 cursor-not-allowed"}`}>Save Daily Entry</button></div><div className="grid gap-4 md:grid-cols-3"><Field label="Total Repair Orders" value={current.repairOrders} disabled={!canEditStore} onChange={(v) => update("repairOrders", v)} /><Field label="Total Hours" value={current.hours} disabled={!canEditStore} onChange={(v) => update("hours", v)} /><Field label="Total Labor" value={current.labor} disabled={!canEditStore} onChange={(v) => update("labor", v)} /><Field label="Total Parts" value={current.parts} disabled={!canEditStore} onChange={(v) => update("parts", v)} /><Field label="Total Labor Gross" value={current.laborGross} disabled={!canEditStore} onChange={(v) => update("laborGross", v)} /><Field label="Total Parts Gross" value={current.partsGross} disabled={!canEditStore} onChange={(v) => update("partsGross", v)} /></div></Card><div className="grid gap-4 md:grid-cols-6"><Stat title="Daily ELR" value={money(daily.elr)} sub="Labor ÷ Hours" /><Stat title="Labor Total" value={money(daily.labor)} /><Stat title="Parts Total" value={money(daily.parts)} /><Stat title="Labor Gross" value={money(daily.laborGross)} /><Stat title="Parts Gross" value={money(daily.partsGross)} /><Stat title="Daily Gross" value={money(daily.totalGross)} /></div></div>;
+function DailyTab({ current, date, setDate, update, saveDailyEntry, daily, forecast, forecastTotalSale, canEditStore, activeLogin, store }) {
+  return (
+    <div className="space-y-6">
+      <Card className="p-5">
+        <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div>
+            <h2 className="text-xl font-bold">Daily Entry</h2>
+            <p className="text-sm text-slate-500">Enter numbers for the prior open business day. Sundays and holidays are skipped automatically.</p>
+            {!canEditStore && <p className="mt-2 rounded-xl bg-slate-100 px-4 py-3 text-sm font-bold text-slate-600">Read only: {activeLogin.name} can view {store}, but can only edit {activeLogin.store}.</p>}
+          </div>
+          <div>
+            <label className="mb-2 block text-xs font-bold uppercase text-slate-500">Prior Business Day Entry Date</label>
+            <input className="h-11 rounded-xl border border-slate-300 px-3" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          </div>
+        </div>
+        <div className="mb-5 flex justify-end">
+          <button disabled={!canEditStore} onClick={saveDailyEntry} className={`rounded-xl px-6 py-3 text-sm font-extrabold uppercase tracking-wide shadow-sm ${canEditStore ? "bg-slate-900 text-white" : "bg-slate-200 text-slate-400 cursor-not-allowed"}`}>Save Daily Entry</button>
+        </div>
+        <div className="grid gap-4 md:grid-cols-3">
+          <Field label="Total Repair Orders" value={current.repairOrders} disabled={!canEditStore} onChange={(v) => update("repairOrders", v)} />
+          <Field label="Total Hours" value={current.hours} disabled={!canEditStore} onChange={(v) => update("hours", v)} />
+          <Field label="Total Labor" value={current.labor} disabled={!canEditStore} onChange={(v) => update("labor", v)} />
+          <Field label="Total Parts" value={current.parts} disabled={!canEditStore} onChange={(v) => update("parts", v)} />
+          <Field label="Total Labor Gross" value={current.laborGross} disabled={!canEditStore} onChange={(v) => update("laborGross", v)} />
+          <Field label="Total Parts Gross" value={current.partsGross} disabled={!canEditStore} onChange={(v) => update("partsGross", v)} />
+        </div>
+      </Card>
+      <div className="grid gap-4 md:grid-cols-6">
+        <Stat title="Daily ELR" value={money(daily.elr)} sub="Labor ÷ Hours" />
+        <Stat title="Labor Total" value={money(daily.labor)} />
+        <Stat title="Parts Total" value={money(daily.parts)} />
+        <Stat title="Labor Gross" value={money(daily.laborGross)} />
+        <Stat title="Parts Gross" value={money(daily.partsGross)} />
+        <Stat title="Daily Gross" value={money(daily.totalGross)} />
+      </div>
+      <div className="rounded-3xl border-2 border-yellow-400 bg-yellow-100 px-6 py-6 text-center shadow-sm">
+        <p className="text-sm font-extrabold uppercase tracking-wide text-slate-600">Month End Tracking</p>
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          <div className="rounded-2xl bg-white/70 px-5 py-5">
+            <p className="text-xs font-bold uppercase text-slate-500">Total Service and Parts</p>
+            <p className="mt-2 text-4xl font-black text-slate-950">{money(forecastTotalSale)}</p>
+          </div>
+          <div className="rounded-2xl bg-white/70 px-5 py-5">
+            <p className="text-xs font-bold uppercase text-slate-500">Month End Tracking Gross</p>
+            <p className="mt-2 text-4xl font-black text-slate-950">{money(forecast.totalGross)}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function MonthlyTab({ monthRows, monthly, selected, forecast, multiplier, group, store, date, savedMonth, saveMonthlyTotal }) {
-  return <div className="space-y-6"><div className="grid gap-4 md:grid-cols-5"><Stat title="Month ROs" value={qty(monthly.repairOrders)} sub={`Tracking: ${qty(selected.repairOrders * multiplier)}`} /><Stat title="Month Hours" value={qty(monthly.hours, 1)} sub={`Tracking: ${qty(selected.hours * multiplier, 1)}`} /><Stat title="Month Labor" value={money(monthly.labor)} sub={`Tracking: ${money(forecast.labor)}`} /><Stat title="Month Parts" value={money(monthly.parts)} sub={`Tracking: ${money(forecast.parts)}`} /><Stat title="Month ELR" value={money(monthly.elr)} sub={`Group ELR: ${money(group.elr)}`} /></div><Card className="overflow-visible p-0"><div className="sticky top-0 z-30 rounded-t-2xl border-b border-slate-200 bg-white px-5 pb-3 pt-5 shadow-sm"><div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between"><div><h2 className="text-xl font-bold">Monthly Summary — {store}</h2><p className="mt-1 text-sm text-slate-500">{fmtMonth(date)}</p>{savedMonth && <p className="mt-1 text-xs font-bold text-green-700">Saved month total: {new Date(savedMonth.saved_at).toLocaleString()}</p>}</div><button onClick={saveMonthlyTotal} className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-extrabold uppercase tracking-wide text-white shadow-sm">Save Month Totals</button></div></div><div className="px-5 pb-5"><div className="mt-5 max-h-[560px] overflow-auto rounded-xl border border-slate-200"><table className="w-full min-w-[900px] text-sm"><thead><tr className="border-b text-left text-xs uppercase text-slate-500">{["Date", "Status", "ROs", "Hours", "Labor", "Parts", "Labor Gross", "Parts Gross", "ELR"].map((h) => <th key={h} className="sticky top-0 bg-slate-50 px-3 py-3">{h}</th>)}</tr></thead><tbody>{monthRows.map((row) => { const status = dayStatus(row.date); const rowTotals = totalsOf([row]); return <tr key={row.id} className={`border-b ${row.date === date ? "bg-yellow-100" : status.closed ? "bg-slate-50 text-slate-400" : "bg-white"}`}><td className="px-3 py-3 font-bold">{fmtDate(row.date)}</td><td className="px-3 py-3">{status.reason}</td><td className="px-3 py-3">{qty(row.repairOrders)}</td><td className="px-3 py-3">{qty(row.hours, 1)}</td><td className="px-3 py-3">{money(row.labor)}</td><td className="px-3 py-3">{money(row.parts)}</td><td className="px-3 py-3">{money(row.laborGross)}</td><td className="px-3 py-3">{money(row.partsGross)}</td><td className="px-3 py-3">{money(rowTotals.elr)}</td></tr>; })}</tbody></table></div></div></Card></div>;
+  return (
+    <div className="space-y-6">
+      <div className="grid gap-4 md:grid-cols-5">
+        <Stat title="Month ROs" value={qty(monthly.repairOrders)} sub={`Tracking: ${qty(selected.repairOrders * multiplier)}`} />
+        <Stat title="Month Hours" value={qty(monthly.hours, 1)} sub={`Tracking: ${qty(selected.hours * multiplier, 1)}`} />
+        <Stat title="Month Labor" value={money(monthly.labor)} sub={`Tracking: ${money(forecast.labor)}`} />
+        <Stat title="Month Parts" value={money(monthly.parts)} sub={`Tracking: ${money(forecast.parts)}`} />
+        <Stat title="Month ELR" value={money(monthly.elr)} sub={`Group ELR: ${money(group.elr)}`} />
+      </div>
+      <Card className="overflow-visible p-0">
+        <div className="sticky top-0 z-30 rounded-t-2xl border-b border-slate-200 bg-white px-5 pb-3 pt-5 shadow-sm">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 className="text-xl font-bold">Monthly Summary — {store}</h2>
+              <p className="mt-1 text-sm text-slate-500">{fmtMonth(date)}</p>
+              {savedMonth && <p className="mt-1 text-xs font-bold text-green-700">Saved month total: {new Date(savedMonth.saved_at).toLocaleString()}</p>}
+            </div>
+            <button onClick={saveMonthlyTotal} className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-extrabold uppercase tracking-wide text-white shadow-sm">Save Month Totals</button>
+          </div>
+        </div>
+        <div className="px-5 pb-5">
+          <div className="mt-5 max-h-[560px] overflow-auto rounded-xl border border-slate-200">
+            <table className="w-full min-w-[900px] text-sm">
+              <thead>
+                <tr className="border-b text-left text-xs uppercase text-slate-500">
+                  {["Date", "Status", "ROs", "Hours", "Labor", "Parts", "Labor Gross", "Parts Gross", "ELR"].map((h) => <th key={h} className="sticky top-0 bg-slate-50 px-3 py-3">{h}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {monthRows.map((row) => {
+                  const status = dayStatus(row.date);
+                  const rowTotals = totalsOf([row]);
+                  return (
+                    <tr key={row.id} className={`border-b ${row.date === date ? "bg-yellow-100" : status.closed ? "bg-slate-50 text-slate-400" : "bg-white"}`}>
+                      <td className="px-3 py-3 font-bold">{fmtDate(row.date)}</td>
+                      <td className="px-3 py-3">{status.reason}</td>
+                      <td className="px-3 py-3">{qty(row.repairOrders)}</td>
+                      <td className="px-3 py-3">{qty(row.hours, 1)}</td>
+                      <td className="px-3 py-3">{money(row.labor)}</td>
+                      <td className="px-3 py-3">{money(row.parts)}</td>
+                      <td className="px-3 py-3">{money(row.laborGross)}</td>
+                      <td className="px-3 py-3">{money(row.partsGross)}</td>
+                      <td className="px-3 py-3">{money(rowTotals.elr)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </Card>
+    </div>
+  );
 }
 
 function TrackingTab({ selected, forecast, forecastTotalSale, group, monthPercent, store, date, savedMonth, saveMonthlyTotal }) {
-  return <div className="space-y-6"><div className="grid gap-4 md:grid-cols-5"><Stat title="MTD Total ROs" value={qty(selected.repairOrders)} /><Stat title="MTD Total Hours" value={qty(selected.hours, 1)} /><Stat title="MTD Total Labor" value={money(selected.labor)} /><Stat title="MTD Total Parts" value={money(selected.parts)} /><Stat title="MTD Gross" value={money(selected.totalGross)} /></div><Card className="p-6"><div className="mb-5"><h2 className="text-2xl font-bold">MTD & Tracking — {store}</h2><p className="text-sm text-slate-500">{fmtMonth(date)} · {qty(monthPercent, 1)}% of working month complete</p></div><div className="grid gap-4 md:grid-cols-2"><Stat title="Labor Tracking" value={money(forecast.labor)} /><Stat title="Parts Tracking" value={money(forecast.parts)} /></div><div className="mt-6 grid gap-4 md:grid-cols-2"><div className="w-full rounded-2xl bg-yellow-100 px-6 py-5 text-center ring-2 ring-yellow-400"><p className="text-xs font-bold uppercase text-slate-600">Month End Tracking Parts and Labor</p><p className="mt-1 text-4xl font-extrabold">{money(forecastTotalSale)}</p></div><div className="w-full rounded-2xl bg-yellow-100 px-6 py-5 text-center ring-2 ring-yellow-400"><p className="text-xs font-bold uppercase text-slate-600">Month End Parts and Labor Tracking Gross</p><p className="mt-1 text-4xl font-extrabold">{money(forecast.totalGross)}</p></div></div><div className="mt-4 flex flex-col items-center gap-3"><button onClick={saveMonthlyTotal} className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-extrabold uppercase tracking-wide text-white shadow-sm">Save Month Totals</button>{savedMonth && <p className="text-center text-xs font-bold text-green-700">Last saved: {new Date(savedMonth.saved_at).toLocaleString()}</p>}</div></Card></div>;
+  return (
+    <div className="space-y-6">
+      <div className="grid gap-4 md:grid-cols-5">
+        <Stat title="MTD Total ROs" value={qty(selected.repairOrders)} />
+        <Stat title="MTD Total Hours" value={qty(selected.hours, 1)} />
+        <Stat title="MTD Total Labor" value={money(selected.labor)} />
+        <Stat title="MTD Total Parts" value={money(selected.parts)} />
+        <Stat title="MTD Gross" value={money(selected.totalGross)} />
+      </div>
+      <Card className="p-6">
+        <div className="mb-5">
+          <h2 className="text-2xl font-bold">MTD & Tracking — {store}</h2>
+          <p className="text-sm text-slate-500">{fmtMonth(date)} · {qty(monthPercent, 1)}% of working month complete</p>
+        </div>
+        <div className="grid gap-4 md:grid-cols-2">
+          <Stat title="Labor Tracking" value={money(forecast.labor)} />
+          <Stat title="Parts Tracking" value={money(forecast.parts)} />
+        </div>
+        <div className="mt-6 grid gap-4 md:grid-cols-2">
+          <div className="w-full rounded-2xl bg-yellow-100 px-6 py-5 text-center ring-2 ring-yellow-400">
+            <p className="text-xs font-bold uppercase text-slate-600">Month End Tracking Parts and Labor</p>
+            <p className="mt-1 text-4xl font-extrabold">{money(forecastTotalSale)}</p>
+          </div>
+          <div className="w-full rounded-2xl bg-yellow-100 px-6 py-5 text-center ring-2 ring-yellow-400">
+            <p className="text-xs font-bold uppercase text-slate-600">Month End Parts and Labor Tracking Gross</p>
+            <p className="mt-1 text-4xl font-extrabold">{money(forecast.totalGross)}</p>
+          </div>
+        </div>
+        <div className="mt-4 flex flex-col items-center gap-3">
+          <button onClick={saveMonthlyTotal} className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-extrabold uppercase tracking-wide text-white shadow-sm">Save Month Totals</button>
+          {savedMonth && <p className="text-center text-xs font-bold text-green-700">Last saved: {new Date(savedMonth.saved_at).toLocaleString()}</p>}
+        </div>
+      </Card>
+    </div>
+  );
 }
 
 function DocsAverageCard({ docsAverage, monthPercent }) {
@@ -301,16 +434,16 @@ function DocsAverageCard({ docsAverage, monthPercent }) {
         <StoreBox label="Avg Parts Gross" value={money(docsAverage.partsGross)} />
         <StoreBox label="Group ELR" value={money(docsAverage.elr)} />
         <StoreBox label="Group Gross Per RO" value={money(docsAverage.grossPerRo)} />
-        <StoreBox label="Group Parts/Labor" value={qty(docsAverage.partsToLabor, 2)} />
+        <StoreBox label="Group Parts Labor" value={qty(docsAverage.partsToLabor, 2)} />
       </div>
       <Progress percent={monthPercent} />
     </Card>
   );
 }
 
-function OverviewTab({ stores, activeLogin, visibleRows, group, monthPercent }) {
+function OverviewTab({ stores, activeLogin, visibleRows, group, multiplier, monthPercent }) {
   const overviewStores = activeLogin && activeLogin.role === "dealer"
-    ? [...stores.filter((s) => s !== activeLogin.store), activeLogin.store]
+    ? [activeLogin.store, ...stores.filter((s) => s !== activeLogin.store)]
     : stores;
 
   const storeCount = Math.max(stores.length, 1);
@@ -327,6 +460,8 @@ function OverviewTab({ stores, activeLogin, visibleRows, group, monthPercent }) 
   };
 
   const isDealer = activeLogin && activeLogin.role === "dealer";
+  const groupTrackingTotalSale = group.totalSale * multiplier;
+  const groupTrackingGross = group.totalGross * multiplier;
 
   return (
     <div className="space-y-6">
@@ -337,18 +472,51 @@ function OverviewTab({ stores, activeLogin, visibleRows, group, monthPercent }) 
         <Stat title="Group Avg Parts/Labor" value={qty(group.partsToLabor, 2)} />
       </div>
 
+      <div className="rounded-3xl border-2 border-yellow-400 bg-yellow-100 px-6 py-6 text-center shadow-sm">
+        <p className="text-sm font-extrabold uppercase tracking-wide text-slate-600">Group Month End Tracking</p>
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          <div className="rounded-2xl bg-white/70 px-5 py-5">
+            <p className="text-xs font-bold uppercase text-slate-500">Group Total Service and Parts</p>
+            <p className="mt-2 text-4xl font-black text-slate-950">{money(groupTrackingTotalSale)}</p>
+          </div>
+          <div className="rounded-2xl bg-white/70 px-5 py-5">
+            <p className="text-xs font-bold uppercase text-slate-500">Group Month End Tracking Gross</p>
+            <p className="mt-2 text-4xl font-black text-slate-950">{money(groupTrackingGross)}</p>
+          </div>
+        </div>
+      </div>
+
       <Card className="p-5">
         <h2 className="mb-4 text-xl font-bold">GROUP OVERVIEW — Store Running Totals</h2>
         <div className="overflow-x-auto">
           <div className="flex gap-4 pb-2 items-stretch">
-            {!isDealer && <DocsAverageCard docsAverage={docsAverage} monthPercent={monthPercent} />}
+            <DocsAverageCard docsAverage={docsAverage} monthPercent={monthPercent} />
 
             {overviewStores.map((storeName) => {
               const st = totalsOf(visibleRows.filter((r) => r.store === storeName));
+              const comparisonValues = [
+                [st.repairOrders, docsAverage.repairOrders],
+                [st.hours, docsAverage.hours],
+                [st.labor, docsAverage.labor],
+                [st.parts, docsAverage.parts],
+                [st.laborGross, docsAverage.laborGross],
+                [st.partsGross, docsAverage.partsGross],
+                [st.elr, docsAverage.elr],
+                [st.grossPerRo, docsAverage.grossPerRo],
+                [st.partsToLabor, docsAverage.partsToLabor],
+              ];
+              const greenCount = comparisonValues.filter(([value, benchmark]) => Number(value || 0) >= Number(benchmark || 0)).length;
+              const redCount = comparisonValues.length - greenCount;
               return (
                 <Card key={storeName} className="min-w-[270px] w-[270px] bg-slate-50 p-4 shadow-none flex flex-col justify-between">
                   <div className="mb-4 flex items-start justify-between gap-3 min-h-[56px]">
-                    <h3 className="text-base font-extrabold leading-tight">{storeName}</h3>
+                    <div>
+                      <h3 className="text-base font-extrabold leading-tight">{storeName}</h3>
+                      <div className="mt-2 flex gap-2">
+                        <span className="rounded-full bg-green-100 px-3 py-1 text-[10px] font-extrabold text-green-700">{greenCount} Green</span>
+                        <span className="rounded-full bg-red-100 px-3 py-1 text-[10px] font-extrabold text-red-700">{redCount} Red</span>
+                      </div>
+                    </div>
                     <span className="rounded-full bg-white px-3 py-1 text-[10px] font-semibold text-slate-600 leading-tight text-center min-w-[58px] shadow-sm">{qty(monthPercent, 1)}% month</span>
                   </div>
                   <div className="space-y-3 text-sm">
@@ -360,14 +528,12 @@ function OverviewTab({ stores, activeLogin, visibleRows, group, monthPercent }) 
                     <StoreBox label="Parts Gross" value={money(st.partsGross)} badge={<Badge value={st.partsGross} benchmark={docsAverage.partsGross} />} />
                     <StoreBox label="ELR" value={money(st.elr)} badge={<Badge value={st.elr} benchmark={docsAverage.elr} />} />
                     <StoreBox label="Gross Per RO" value={money(st.grossPerRo)} badge={<Badge value={st.grossPerRo} benchmark={docsAverage.grossPerRo} />} />
-                    <StoreBox label="Parts/Labor" value={qty(st.partsToLabor, 2)} badge={<Badge value={st.partsToLabor} benchmark={docsAverage.partsToLabor} />} />
+                    <StoreBox label="Parts Labor" value={qty(st.partsToLabor, 2)} badge={<Badge value={st.partsToLabor} benchmark={docsAverage.partsToLabor} />} />
                   </div>
                   <Progress percent={monthPercent} />
                 </Card>
               );
             })}
-
-            {isDealer && <DocsAverageCard docsAverage={docsAverage} monthPercent={monthPercent} />}
           </div>
         </div>
       </Card>
