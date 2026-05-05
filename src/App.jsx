@@ -4,13 +4,21 @@ import { createClient } from "@supabase/supabase-js";
 const viteEnv = typeof import.meta !== "undefined" && import.meta.env ? import.meta.env : {};
 const cleanEnvValue = (value) => {
   if (!value) return "";
-  return String(value)
+  let cleaned = String(value)
     .trim()
     .replace(/^VITE_SUPABASE_URL=/, "")
     .replace(/^VITE_SUPABASE_ANON_KEY=/, "")
     .replace(/^VITE_SUPABASE_PUBLISHABLE_KEY=/, "")
+    .replace(/^NEXT_PUBLIC_SUPABASE_URL=/, "")
+    .replace(/^NEXT_PUBLIC_SUPABASE_ANON_KEY=/, "")
+    .replace(/^NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=/, "")
     .replace(/^['\"]|['\"]$/g, "")
     .trim();
+
+  return cleaned
+    .split("")
+    .filter((ch) => ch !== " " && ch !== "\n" && ch !== "\r" && ch !== "\t")
+    .join("");
 };
 
 const supabaseUrl = cleanEnvValue(viteEnv.VITE_SUPABASE_URL);
